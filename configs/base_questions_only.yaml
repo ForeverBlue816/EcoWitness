@@ -1,0 +1,12 @@
+# Ablation: citations learned on base questions only, no revision conversations at all.
+langs: [en, zh]
+modes: [base]
+fields: [answer, support, load_bearing]
+pair: false
+lambda_iso: 0.0
+lora_r: 32
+lora_alpha: 64
+epochs: 3
+lr: 1.0e-4
+batch_size: 2
+grad_accum: 4

@@ -1,0 +1,12 @@
+transformers>=5.3
+peft>=0.18
+accelerate>=1.5
+torch>=2.6
+torchvision
+pillow
+pyyaml
+huggingface_hub
+openai
+# optional fused kernels for Qwen3.5 Gated DeltaNet layers:
+# flash-linear-attention
+# causal-conv1d

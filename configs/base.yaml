@@ -1,0 +1,14 @@
+# Main run: witness protocol + counterfactual pairs + isolation loss. C1 is held out of train by the data builder.
+langs: [en, zh]
+modes: [base, revise]
+fields: [changed, answer, support, load_bearing]
+pair: true
+lambda_iso: 0.5
+lora_r: 32
+lora_alpha: 64
+lora_dropout: 0.05
+epochs: 3
+lr: 1.0e-4
+batch_size: 2          # groups per GPU; a group holds 1 or 2 conversations
+grad_accum: 4          # 4 GPUs x 2 groups x 4 = 32 groups per optimiser step
+max_length: 4096

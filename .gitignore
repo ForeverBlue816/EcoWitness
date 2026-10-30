@@ -1,0 +1,8 @@
+# generated data and outputs stay out of git (upload data with scripts/pack_for_cluster.ps1)
+data/
+runs/
+logs/
+*.zip
+__pycache__/
+*.pyc
+.DS_Store
