@@ -48,18 +48,20 @@ cd C:\Users\yanlong.chen\Desktop\数据集\ecowitness
 `$SCRATCH` 的文件创建 40 天后会被清理，模型和数据都可以重建，但 adapter 和 metrics 要及时拷回 `$HOME` 或 `$FAST`。
 所有路径集中在 `scripts/cineca_env.sh`，账号默认 `iscrb_wearusfm`，分区 `boost_usr_prod`，可用环境变量覆盖。
 
-打包与上传（本机）：
+代码走 git，数据走 tar 包。
+
+数据打包（本机，约 500 MB）：
 ```
 powershell -ExecutionPolicy Bypass -File scripts\pack_for_cluster.ps1
-scp ..\ecowitness_code.zip ychen003@login.leonardo.cineca.it:~/
-scp ..\ecowitness_data.zip ychen003@login.leonardo.cineca.it:/leonardo_scratch/large/userexternal/ychen003/
+scp ..\ecowitness_data.tar.gz ychen003@login.leonardo.cineca.it:/leonardo_scratch/large/userexternal/ychen003/
 ```
-代码走 git，数据走 zip。集群上：
+集群上：
 ```
+# 私有库：先在 GitHub 生成一个只勾 repo 权限的 token，或在 ~/.local/bin 装 gh 后 gh auth login
 cd ~ && git clone https://github.com/ForeverBlue816/EcoWitness.git ecowitness   # 以后更新只需 cd ~/ecowitness && git pull
-mkdir -p $SCRATCH/ecowitness && unzip -q $SCRATCH/ecowitness_data.zip -d $SCRATCH/ecowitness
+mkdir -p $SCRATCH/ecowitness && tar -xzf $SCRATCH/ecowitness_data.tar.gz -C $SCRATCH/ecowitness
+ls $SCRATCH/ecowitness        # 应看到 data/ 和 satellite_rgb/
 ```
-（`ecowitness_code.zip` 只在没有 git 访问时作为备用。）
 
 ## 三、环境与模型（登录节点，有网络）
 
