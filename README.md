@@ -54,11 +54,12 @@ powershell -ExecutionPolicy Bypass -File scripts\pack_for_cluster.ps1
 scp ..\ecowitness_code.zip ychen003@login.leonardo.cineca.it:~/
 scp ..\ecowitness_data.zip ychen003@login.leonardo.cineca.it:/leonardo_scratch/large/userexternal/ychen003/
 ```
-集群上解压：
+代码走 git，数据走 zip。集群上：
 ```
-cd ~ && rm -rf ecowitness && mkdir ecowitness && unzip -q ~/ecowitness_code.zip -d ecowitness
+cd ~ && git clone https://github.com/ForeverBlue816/EcoWitness.git ecowitness   # 以后更新只需 cd ~/ecowitness && git pull
 mkdir -p $SCRATCH/ecowitness && unzip -q $SCRATCH/ecowitness_data.zip -d $SCRATCH/ecowitness
 ```
+（`ecowitness_code.zip` 只在没有 git 访问时作为备用。）
 
 ## 三、环境与模型（登录节点，有网络）
 
