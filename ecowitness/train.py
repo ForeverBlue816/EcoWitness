@@ -27,7 +27,7 @@ DEFAULTS = {
     'model': 'Qwen/Qwen3.5-9B', 'workspace': str(HERE.parent), 'data_dir': str(HERE / 'data'), 'langs': ['en', 'zh'], 'splits': ['train'],
     'modes': ['base', 'revise'], 'fields': list(ALL_FIELDS), 'pair': True, 'exclude_families': [], 'edit_classes': None, 'max_items': 0,
     'lambda_iso': 0.5, 'lora_r': 32, 'lora_alpha': 64, 'lora_dropout': 0.05, 'lora_merger': False,
-    'epochs': 3, 'lr': 1e-4, 'warmup_ratio': 0.03, 'batch_size': 2, 'grad_accum': 4, 'max_length': 4096, 'bf16': True,
+    'epochs': 3, 'lr': 1e-4, 'warmup_ratio': 0.03, 'batch_size': 1, 'grad_accum': 8, 'max_length': 6144, 'bf16': True,
     'gradient_checkpointing': True, 'attn': 'sdpa', 'logging_steps': 20, 'save_steps': 500, 'save_total_limit': 2,
     'num_workers': 4, 'seed': 0, 'output_dir': str(HERE / 'runs/base'), 'report_to': 'none', 'resume': False,
 }
@@ -58,6 +58,10 @@ def parse():
 class WitnessTrainer(Trainer):
     def __init__(self, *args, lambda_iso=0.0, letter_ids=None, **kw):
         super().__init__(*args, **kw)
+        # The model accepts loss kwargs, so the Trainer would skip dividing the loss by gradient_accumulation_steps and
+        # expect num_items_in_batch to be used instead. compute_loss returns a per-batch mean (CE + iso KL), so let the
+        # Trainer do the division; otherwise gradients come out grad_accum times too large.
+        self.model_accepts_loss_kwargs = False
         self.lambda_iso = lambda_iso
         self.letter_ids = letter_ids
         self._iso_log = []

@@ -9,6 +9,8 @@ from __future__ import annotations
 
 import collections
 import copy
+import importlib
+import os
 import re
 import sys
 from dataclasses import dataclass, field
@@ -16,9 +18,11 @@ from datetime import date, timedelta
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-V8 = ROOT / 'qualitative_benchmark_20261026_v8'
-sys.path.insert(0, str(V8 / 'tools'))
-import build_v8 as bv  # noqa: E402
+# Source benchmark: v9 by default (v8 rules on the rebuilt DNA evidence); EW_BENCH=qualitative_benchmark_20261026_v8 for v8.
+BENCH = ROOT / os.environ.get('EW_BENCH', 'qualitative_benchmark_20261105_v9')
+V8 = BENCH  # older name, kept for callers
+sys.path.insert(0, str(BENCH / 'tools'))
+bv = importlib.import_module(sorted(p.stem for p in (BENCH / 'tools').glob('build_v*.py'))[-1])
 import diversity_families as div  # noqa: E402
 import environment_families as envf  # noqa: E402
 import knowledge_families as kn  # noqa: E402

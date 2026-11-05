@@ -1,6 +1,6 @@
-# EcoWitness：证据修订训练与评测（Qwen3.5 + v8 河流生态基准）
+# EcoWitness：证据修订训练与评测（Qwen3.5 + v9 河流生态基准）
 
-把 v8 基准的每道题改写成“证人协议”：每条证据有编号（IMG、R1、SP-01、ROW-01…），模型回答时必须给出
+把 v9 基准（v8 的出题规则 + 在实验室原始注释上重建的 DNA 证据，1,334 个 DNA 样点）的每道题改写成“证人协议”：每条证据有编号（IMG、R1、SP-01、ROW-01…），模型回答时必须给出
 `answer / support / load_bearing` 三行；再由生成器对证据做反事实修订（撤销、新增、改判、改字段、换影像），
 精确算出修订后的真值，训练并评测模型“分得清哪条证据承重、不被无关修订传染”。
 
@@ -25,9 +25,9 @@ ecowitness/
 cd C:\Users\yanlong.chen\Desktop\数据集\ecowitness
 %USERPROFILE%\.local\bin\python3.14.exe -X utf8 -m ecowitness.build_revisions --splits train val test --out data
 ```
-依赖同级目录的 `qualitative_benchmark_20261026_v8/`（含 tools 与 reports/answer_evidence.jsonl）、
-`qualitative_vqa_20261023_v5/reports/dna_evidence.json` 和 `Allsample_features_outputs/`。约 10 分钟。
-生成器先用规则把 v8 三个 split 的全部答案重算一遍并断言一致，再做修订；统计写入 `data/stats.json`。
+依赖同级目录的 `qualitative_benchmark_20261105_v9/`（含 tools、reports/answer_evidence.jsonl 与 reports/dna_evidence.json）
+和 `Allsample_features_outputs/`。约 10 分钟。设 `EW_BENCH=qualitative_benchmark_20261026_v8` 可改回 v8（v8 用 v5 的 DNA 证据）。
+生成器先用规则把基准三个 split 的全部答案重算一遍并断言一致，再做修订；统计写入 `data/stats.json`。
 
 记录格式（每行一条）：`mode` 为 `base`（原题，目标含 support / load_bearing）、`revise`（原题 + 模型原答案 + 一条修订通知，
 目标多一行 `changed`）、`chain`（val/test，2–5 步连续修订，`steps` 内逐步给出通知与真值）。
@@ -81,7 +81,7 @@ Qwen3.5 要点：架构 `Qwen3_5ForConditionalGeneration`（Gated DeltaNet + 注
 
 ```
 cd ~/ecowitness
-bash scripts/run_all.sh            # 主实验：训练(4×A100, 12h 上限) -> 测试集评测，外加零样本基线评测
+bash scripts/run_all.sh            # 主实验：训练(4×A100, 24h 上限) -> 测试集评测，外加零样本基线评测
 bash scripts/run_all.sh ablations  # configs/ 下每个配置各提交一对 train+eval
 RUN=no_iso CONFIG=configs/no_isolation.yaml bash scripts/run_all.sh
 TRAIN_EXTRA="--max_items 2000 --epochs 1" RUN=trial bash scripts/run_all.sh   # 先做一次小规模试跑
@@ -107,5 +107,5 @@ python -m ecowitness.evaluate_api --model qwen3-vl-plus --split test --langs en 
 
 - 底座冻结，LoRA（r=32）挂在语言模型全部投影层（q/k/v/o、Gated DeltaNet 的 in_proj*/out_proj、MLP）；`--lora_merger true` 可把视觉融合层也挂上。
 - 损失 = 助手行的交叉熵 + `lambda_iso` × 对称 KL（base 与其 keep_uncited 修订在答案字母上的分布）。配对样本由 Dataset 分组、Collator 同批展开。
-- 图像 256×256，Qwen3.5 下只占 64 个视觉 token；单条对话一般 1–2k token，`max_length` 4096。
-- 序列最长的题（46 个物种的 K/D 题）约 2.5k token；4×A100 64 GB、每卡 2 组、梯度累积 4，一轮约 2–3 小时（无融合核时更慢）。
+- 图像 256×256，Qwen3.5 下只占 64 个视觉 token；单条对话一般 1–2k token；v9 最长的训练对话约 4.8k token（两个样点名录对比的 D3 题），`max_length` 设为 6144。
+- v9 训练集每种语言 72,498 条（v8 为 54,741）。4×A100 64 GB、每卡 1 组、梯度累积 8，一轮估计 3–4 小时（无融合核时更慢），作业时限 24 小时；先用 `TRAIN_EXTRA="--max_items 2000 --epochs 1"` 试跑量一下真实速度。

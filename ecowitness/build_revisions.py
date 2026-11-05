@@ -1,7 +1,7 @@
-"""Build the EcoWitness dataset from the v8 benchmark: witness-protocol base questions, single-step counterfactual
-revisions (flip / keep-cited / keep-uncited) and multi-step revision chains.
+"""Build the EcoWitness dataset from the benchmark (v9 by default, EW_BENCH selects another): witness-protocol base
+questions, single-step counterfactual revisions (flip / keep-cited / keep-uncited) and multi-step revision chains.
 
-Run from the `ecowitness` directory (needs the v8 release, its tools and the v5 source reports next to it):
+Run from the `ecowitness` directory (needs the benchmark release, its tools and the v5 source reports next to it):
     python -m ecowitness.build_revisions --splits train val test --langs en zh --out data
 """
 from __future__ import annotations
@@ -39,7 +39,10 @@ def load_pools(evidence, records_by_split):
         if e['task'][0] == 'A' and e['tier'] in ('easy', 'medium') and e['sample_id'] in images:
             labels[(e['sample_id'], e['task'])] = e['label']['category']
             by_family[(e['task'], e['split'])].append(e['sample_id'])
-    dna = json.loads((V5 / 'reports/dna_evidence.json').read_text(encoding='utf8'))
+    dna_path = V8 / 'reports/dna_evidence.json'          # v9 ships its own DNA evidence
+    if not dna_path.exists():
+        dna_path = V5 / 'reports/dna_evidence.json'      # v8 used the v5 evidence
+    dna = json.loads(dna_path.read_text(encoding='utf8'))
     return rules.Pools(dna, images, labels, dict(by_family), dict(by_split))
 
 

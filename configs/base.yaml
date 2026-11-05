@@ -9,6 +9,6 @@ lora_alpha: 64
 lora_dropout: 0.05
 epochs: 3
 lr: 1.0e-4
-batch_size: 2          # groups per GPU; a group holds 1 or 2 conversations
-grad_accum: 4          # 4 GPUs x 2 groups x 4 = 32 groups per optimiser step
-max_length: 4096
+batch_size: 1          # groups per GPU; a group holds 1 or 2 conversations
+grad_accum: 8          # 4 GPUs x 1 group x 8 = 32 groups per optimiser step
+max_length: 6144       # longest v9 train conversation is about 4.8k tokens (two-site D3 lists)
