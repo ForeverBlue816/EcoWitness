@@ -57,7 +57,6 @@ scp ..\ecowitness_data.tar.gz ychen003@login.leonardo.cineca.it:/leonardo_scratc
 ```
 集群上：
 ```
-# 私有库：先在 GitHub 生成一个只勾 repo 权限的 token，或在 ~/.local/bin 装 gh 后 gh auth login
 cd ~ && git clone https://github.com/ForeverBlue816/EcoWitness.git ecowitness   # 以后更新只需 cd ~/ecowitness && git pull
 mkdir -p $SCRATCH/ecowitness && tar -xzf $SCRATCH/ecowitness_data.tar.gz -C $SCRATCH/ecowitness
 ls $SCRATCH/ecowitness        # 应看到 data/ 和 satellite_rgb/
