@@ -2,7 +2,7 @@
 # Shared Leonardo environment. Source it, do not run it:   source scripts/cineca_env.sh
 # Layout (same convention as PhysioWave-T/docs/cineca_setup.md):
 #   $HOME/ecowitness          code  (backed up, 50 GB quota)
-#   $HOME/ecowitness_env      venv on top of the cineca-ai module (never let pip replace the module's torch)
+#   $HOME/ecowitness_env      venv on top of the cineca-ai module (torch >= 2.6 from the module, else a wheel in the venv)
 #   $SCRATCH/ecowitness/...   data, satellite images, model weights, runs  (SCRATCH is purged 40 days after creation;
 #                             everything here is rebuildable, but copy adapters/metrics you want to keep to $HOME or $FAST)
 # EW_VARS_ONLY=1 source scripts/cineca_env.sh   -> only export the paths, no module load / venv activation.

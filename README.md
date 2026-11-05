@@ -71,9 +71,13 @@ bash scripts/setup_env.sh        # 先 module load profile/deeplrn cineca-ai/4.3
 bash scripts/download_model.sh   # Qwen/Qwen3.5-9B -> $SCRATCH/ecowitness/models/Qwen3.5-9B（约 19 GB），另下 8 MB 的 tiny 调试模型
 bash scripts/smoke_test.sh       # tiny 模型在登录节点 CPU 上跑通数据、LoRA、3 步训练和评测，约两分钟
 ```
-`setup_env.sh` 的顺序和原则：模块先加载，`python -m venv $HOME/ecowitness_env --system-site-packages` 复用模块里的 CUDA torch；
-纯 Python 依赖正常安装；`transformers`、`peft`、`accelerate` 用 `--no-deps` 安装，避免 pip 拉一个自己的 torch 把模块版本盖掉；
-装完会断言 `torch.__file__` 仍指向 cineca-ai，并检查这版 transformers 认识 `qwen3_5`。
+`setup_env.sh` 的顺序和原则：模块先加载，再 `python -m venv $HOME/ecowitness_env --system-site-packages`。
+cineca-ai 模块会把自己的 site-packages 写进 `PYTHONPATH`，优先级高于 venv，所以脚本（以及 `cineca_env.sh`）激活后把 venv 的
+site-packages 放到 `PYTHONPATH` 最前面，并且只用 `python -m pip`、不升级 pip。
+transformers 5（Qwen3.5 需要 ≥ 5.3）要求 torch ≥ 2.6；cineca-ai/4.3.0 的 torch 是 2.2，因此脚本会往 venv 装
+`torch==2.7.1 torchvision==0.22.1`（cu126 轮子，约 3 GB，可用 `EW_TORCH_SPEC` / `EW_TORCH_INDEX` 覆盖）；模块 torch 够新时则沿用模块的。
+transformers 连同它自己的依赖一起装（升级 regex、tokenizers 等），`peft`、`accelerate` 用 `--no-deps`。
+装完断言：torch ≥ 2.6、transformers 来自 venv 且未禁用 PyTorch、认识 `qwen3_5`。
 Qwen3.5 要点：架构 `Qwen3_5ForConditionalGeneration`（Gated DeltaNet + 注意力混合、原生多模态），`AutoModelForImageTextToText` 加载；
 默认思考模式，训练与推理都用 `enable_thinking=False` 的模板；`flash-linear-attention` 与 `causal-conv1d` 可选，装不上就走慢一些的 torch 实现；
 没有 torchvision 时代码自动退回慢速 PIL 图像处理器（256×256 影像无影响）。
