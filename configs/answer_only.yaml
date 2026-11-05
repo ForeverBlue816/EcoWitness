@@ -1,5 +1,5 @@
 # Ablation: no citation supervision. Targets keep only "changed:" and "answer:"; no isolation loss.
-langs: [en, zh]
+langs: [en]
 modes: [base, revise]
 fields: [changed, answer]
 pair: false

@@ -32,9 +32,10 @@ INT = re.compile(r'\d+')
 A_OPTS = {'A1-NearshoreCover': bv.A1_OPT, 'A2-LandscapePattern': bv.A2_OPT, 'A3-ChannelWidth': bv.A3_OPT, 'A4-WaterFraction': bv.A4_OPT,
           'A5-Sinuosity': envf.A5_OPT, 'A6-RiparianVegetation': envf.A6_OPT, 'A7-BuiltUpBank': envf.A7_OPT}
 TEXT_OPTS = {'C2-MigrationBarrier': bv.C2_OPT, 'C3-ImageTiming': bv.C3_OPT, 'E1-ConnectivityStatus': envf.E1_OPT, 'E2-ReachType': envf.E2_OPT,
-             'D3-SiteComparison': div.D3_OPT, **A_OPTS}
-COUNT_FAMILIES = {'B1-DominantGuild', 'B6-StatusCount', 'D4-RareSpeciesCount', 'D5-SharedSpecies'}
-SET_FAMILIES = {'D1-ThreatenedRecords', 'D2-DetectionPlausibility', 'K1-NonNativeSet', 'K3-MarineStraySet', 'K4-FourCarpsSet', 'K5-LargeBodiedSet', 'K6-SeaRouteSet'}
+             'D3-SiteComparison': div.D3_OPT, 'D9-DominanceClass': div.D9_OPT, **A_OPTS}
+COUNT_FAMILIES = {'B1-DominantGuild', 'B6-StatusCount', 'D4-RareSpeciesCount', 'D5-SharedSpecies', 'D6-FamilyRichness', 'D8-RareDetectionCount'}
+SET_FAMILIES = {'D1-ThreatenedRecords', 'D2-DetectionPlausibility', 'D7-ReadDominance', 'K1-NonNativeSet', 'K3-MarineStraySet', 'K4-FourCarpsSet',
+                'K5-LargeBodiedSet', 'K6-SeaRouteSet'}
 K_GOLD = {'K1-NonNativeSet': lambda n: n in kn.ALIEN, 'K3-MarineStraySet': kn.is_marine, 'K4-FourCarpsSet': lambda n: n in kn.FOUR_CARPS,
           'K5-LargeBodiedSet': lambda n: (kn.max_length(n) or 0) >= 100, 'K6-SeaRouteSet': lambda n: n in kn.SEA_ROUTE}
 K_TRAP = {'K1-NonNativeSet': kn.is_native, 'K3-MarineStraySet': kn.is_obligate_freshwater,
@@ -316,6 +317,26 @@ def evaluate(st):
         names = {t: {c['taxon_label'] for c in st.cards if c['site'] == t} for t in 'AB'}
         shared = names['A'] & names['B']
         return len(shared), [c['wid'] for c in st.cards if c['taxon_label'] in shared]
+    if fam == 'D6-FamilyRichness':
+        fams = [status(c, 'family') for c in st.cards]
+        if not fams or any(f is None for f in fams):
+            return ILL, []
+        return len(set(fams)), [c['wid'] for c in st.cards]
+    if fam in ('D7-ReadDominance', 'D8-RareDetectionCount', 'D9-DominanceClass'):
+        shares = [(c, status(c, 'read_share')) for c in st.cards]
+        if not shares or any(s is None for _, s in shares):
+            return ILL, []
+        if fam == 'D8-RareDetectionCount':
+            thr = round(p['threshold_pct'] / 100, 4)
+            sup = [c['wid'] for c, s in shares if s < thr]
+            return len(sup), sup
+        top = max(s for _, s in shares)
+        tops = [c for c, s in shares if s == top]
+        if fam == 'D7-ReadDominance':
+            if len(tops) != 1:
+                return ILL, []
+            return frozenset({tops[0]['list_no']}), sorted({c['wid'] for c in tops + option_cards(st)})
+        return div.dominance_class(top), [c['wid'] for c in st.cards]
     if fam == 'E1-ConnectivityStatus':
         csi, up = st.record.get('river_connectivity_status_index_pct'), st.record.get('distance_to_nearest_upstream_large_dam_km')
         if csi is None:
@@ -379,7 +400,14 @@ def make_card(taxon, template, site=None):
     if 'status' in template:
         c['status'] = {}
         for k in template['status']:
-            c['status'][k] = div.occupancy(taxon['scientific_name']) if k == 'national_detection_frequency' else taxon['status'].get(k)
+            if k == 'national_detection_frequency':
+                c['status'][k] = div.occupancy(taxon['scientific_name'])
+            elif k == 'family':
+                c['status'][k] = div.family_of(taxon['scientific_name'])
+            elif k == 'read_share':
+                c['status'][k] = div.share_of(taxon)
+            else:
+                c['status'][k] = taxon['status'].get(k)
     if site:
         c['site'] = site
     return c
@@ -519,7 +547,10 @@ class Pools:
         self.taxa = {}
         for d in dna_evidence.values():
             for t in d.get('matched_taxa', []):
-                self.taxa.setdefault(t['scientific_name'], t)
+                name = t['scientific_name']
+                # keep one entry per species, preferring one that carries a read share (needed for D7-D9 additions)
+                if name not in self.taxa or (self.taxa[name].get('read_share') is None and t.get('read_share') is not None):
+                    self.taxa[name] = t
         self.images, self.labels, self.by_family, self.by_split = images, labels, by_family, by_split
         self._cache = {}
 
@@ -539,5 +570,9 @@ class Pools:
                 names = [n for n in names if all(bv.trait(self.taxa[n], f) for f in params['fields'])]
             elif fam in ('D2-DetectionPlausibility', 'D4-RareSpeciesCount'):
                 names = [n for n in names if div.occupancy(n) is not None]
+            elif fam == 'D6-FamilyRichness':
+                names = [n for n in names if div.family_of(n)]
+            elif fam in ('D7-ReadDominance', 'D8-RareDetectionCount', 'D9-DominanceClass'):
+                names = [n for n in names if div.share_of(self.taxa[n]) is not None]
             self._cache[key] = names
         return [n for n in self._cache[key] if n not in present]

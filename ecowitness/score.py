@@ -26,6 +26,7 @@ import argparse
 import collections
 import json
 import random
+import re
 from pathlib import Path
 
 from . import protocol
@@ -270,6 +271,113 @@ def agg_chain(rows, with_ci=True):
     return m
 
 
+# --------------------------------------------------------------------------------------------------- ecology view
+COMPETENCY = {'A': 'habitat_from_imagery', 'B': 'community_trait_reasoning', 'C': 'scene_community_fusion', 'D': 'diversity_and_conservation',
+              'E': 'river_network_and_connectivity', 'K': 'species_knowledge'}
+CONSERVATION_FAMILIES = {'D1-ThreatenedRecords', 'D2-DetectionPlausibility', 'K1-NonNativeSet', 'K3-MarineStraySet', 'K6-SeaRouteSet', 'B6-StatusCount'}
+COUNT_FAMILIES = {'B1-DominantGuild', 'B6-StatusCount', 'D4-RareSpeciesCount', 'D5-SharedSpecies', 'D6-FamilyRichness', 'D8-RareDetectionCount'}
+ORDINAL_FAMILIES = {'A3-ChannelWidth', 'A4-WaterFraction', 'A5-Sinuosity', 'A6-RiparianVegetation', 'A7-BuiltUpBank'}
+READ_FAMILIES = {'D7-ReadDominance', 'D8-RareDetectionCount', 'D9-DominanceClass'}
+NUM_RE = re.compile(r'\d+(?:\.\d+)?')
+
+
+def options_of(record):
+    """letter -> option text, read back from the first user turn."""
+    text = text_of(record['messages'][1])
+    head = text.rfind('\nOptions:')
+    if head < 0:
+        head = text.rfind('\n选项：')
+    out = {}
+    for line in text[head:].splitlines():
+        m = re.match(r'([ABCD])\. (.*)', line.strip())
+        if m:
+            out[m.group(1)] = m.group(2)
+    return out
+
+
+def option_number(text):
+    nums = [float(x) for x in NUM_RE.findall(text)]
+    return sum(nums) / len(nums) if nums else None
+
+
+def witness_kind(wid):
+    return 'image' if wid.startswith('IMG') else 'record' if wid.startswith('R') else 'match_row' if wid.startswith('ROW') else 'species_card'
+
+
+def ecology_rows(r, pred, row):
+    """Add ecological readings to a base/revise row: count error, ordinal distance, modality grounding, edited-witness kind."""
+    fam = r['family']
+    row['competency'] = COMPETENCY.get(r['group'], r['group'])
+    row['conservation'] = fam in CONSERVATION_FAMILIES
+    row['reads'] = fam in READ_FAMILIES
+    p = protocol.parse_output(pred['output'])
+    truth = r.get('truth', {}).get('answer')
+    if fam in COUNT_FAMILIES or fam in ORDINAL_FAMILIES:
+        opts = options_of(r)
+        tv = option_number(opts.get(truth, '')) if truth in opts else None
+        pv = option_number(opts.get(p['answer'], '')) if p['answer'] in opts else None
+        if tv is not None and pv is not None:
+            if fam in COUNT_FAMILIES:
+                row['count_error'] = pv - tv
+            else:
+                order = sorted(opts, key=lambda L: option_number(opts[L]))
+                row['ordinal_distance'] = abs(order.index(p['answer']) - order.index(truth))
+    cited = {witness_kind(w) for w in set(p['support']) | set(p['load_bearing'])}
+    if r['group'] == 'A' or fam == 'C3-ImageTiming':
+        row['cites_image'] = 'image' in cited
+    if fam == 'C1-SceneAndCommunity':
+        row['cites_both_modalities'] = {'image', 'species_card'} <= cited
+    if fam == 'C2-MigrationBarrier':
+        row['cites_both_modalities'] = {'record', 'species_card'} <= cited
+    if r['mode'] == 'revise':
+        e = r.get('edit') or {}
+        row['edited_kind'] = 'image' if e.get('type') == 'swap_image' else witness_kind(e.get('wid') or 'SP')
+    return row
+
+
+def agg_ecology(rows):
+    scored = [x for x in rows if 'correct' in x]
+    if not scored:
+        return None
+    m = {}
+    by = collections.defaultdict(list)
+    for x in scored:
+        by[x['competency']].append(x)
+    m['competency_profile'] = {k: {'n': len(v), 'accuracy': rate(sum(x['correct'] for x in v), len(v)), 'faithful_accuracy': rate(sum(x['faithful'] for x in v), len(v)),
+                                   'load_bearing_f1': prf(*(sum(x['lb'][i] for x in v) for i in range(3)))['f1']} for k, v in sorted(by.items())}
+    cons = [x for x in scored if x['conservation']]
+    m['conservation_items'] = {'n': len(cons), 'accuracy': rate(sum(x['correct'] for x in cons), len(cons)),
+                               'note': 'threatened / protected / non-native / marine-stray / sea-route / native-status questions'}
+    reads = [x for x in scored if x['reads']]
+    if reads:
+        m['read_abundance_items'] = {'n': len(reads), 'accuracy': rate(sum(x['correct'] for x in reads), len(reads))}
+    cnt = [x['count_error'] for x in scored if x.get('count_error') is not None]
+    if cnt:
+        m['species_counts'] = {'n': len(cnt), 'mean_absolute_error': round(sum(abs(e) for e in cnt) / len(cnt), 4), 'bias': round(sum(cnt) / len(cnt), 4),
+                               'over_count_rate': rate(sum(e > 0 for e in cnt), len(cnt)), 'under_count_rate': rate(sum(e < 0 for e in cnt), len(cnt)),
+                               'note': 'count questions only (B1, B6, D4, D5, D6, D8); error in species / families, none answers excluded'}
+    ordv = [x['ordinal_distance'] for x in scored if x.get('ordinal_distance') is not None]
+    if ordv:
+        m['habitat_bins'] = {'n': len(ordv), 'exact_rate': rate(sum(d == 0 for d in ordv), len(ordv)), 'adjacent_bin_error_rate': rate(sum(d == 1 for d in ordv), len(ordv)),
+                             'far_error_rate': rate(sum(d >= 2 for d in ordv), len(ordv)), 'mean_bin_distance': round(sum(ordv) / len(ordv), 4),
+                             'note': 'ordered image classes (channel width, water fraction, sinuosity, riparian vegetation, built-up bank)'}
+    ci = [x['cites_image'] for x in scored if 'cites_image' in x]
+    cb = [x['cites_both_modalities'] for x in scored if 'cites_both_modalities' in x]
+    m['modality_grounding'] = {'image_items_citing_image': rate(sum(ci), len(ci)), 'fusion_items_citing_both_sources': rate(sum(cb), len(cb))}
+    rev = [x for x in scored if x['mode'] == 'revise' and 'edited_kind' in x]
+    if rev:
+        byk = collections.defaultdict(list)
+        for x in rev:
+            byk[x['edited_kind']].append(x)
+        m['revision_by_edited_witness'] = {}
+        for k, v in sorted(byk.items()):
+            ku = [x for x in v if x.get('edit_class') == 'keep_uncited']
+            fl = [x for x in v if x.get('edit_class') == 'flip']
+            m['revision_by_edited_witness'][k] = {'n': len(v), 'accuracy': rate(sum(x['correct'] for x in v), len(v)),
+                                                  'contagion_rate': rate(sum(x['pred_changed'] for x in ku), len(ku)), 'inertia_rate': rate(sum(not x['pred_changed'] for x in fl), len(fl))}
+    return m
+
+
 def cross_lingual(single):
     base = collections.defaultdict(dict)
     for x in single:
@@ -305,7 +413,7 @@ def score_all(records, predictions, meta=None):
             if len(p['step_outputs']) != len(r['steps']):
                 cov['chain_step_count_mismatch'][0] += 1
         else:
-            single.append(single_row(r, p))
+            single.append(ecology_rows(r, p, single_row(r, p)))
     report = {'meta': meta or {}, 'has_truth': truth,
               'coverage': {k: {'predicted': v[0], 'total': v[1]} for k, v in sorted(cov.items()) if v[1]},
               'unknown_prediction_ids': len(set(by_id) - {r['id'] for r in records})}
@@ -323,6 +431,8 @@ def score_all(records, predictions, meta=None):
                 block[mode] = agg_single(rows, with_ci=truth)
         if c:
             block['chain'] = agg_chain(c, with_ci=truth)
+        if truth and s:
+            block['ecology'] = agg_ecology(s)
         report[name] = block
     if truth:
         xl = cross_lingual(single)
@@ -345,6 +455,9 @@ def scorecard(report, scope):
         'redundancy_overreaction_rate': g(r, 'revision', 'redundancy_overreaction_rate'), 'stale_citation_rate': g(r, 'revision', 'stale_citation_rate'),
         'chain_final_accuracy': c.get('final_step_accuracy'), 'chain_drift': c.get('drift'), 'chain_recovery_rate': c.get('recovery_rate'),
         'cross_lingual_agreement': _dig(report, ('cross_lingual', 'answer_agreement_rate')),
+        'conservation_accuracy': _dig(report[scope], ('ecology', 'conservation_items', 'accuracy')),
+        'species_count_mae': _dig(report[scope], ('ecology', 'species_counts', 'mean_absolute_error')),
+        'habitat_far_error_rate': _dig(report[scope], ('ecology', 'habitat_bins', 'far_error_rate')),
         'parse_rate': b.get('parse_rate')}
     return {k: v for k, v in card.items() if v is not None}
 

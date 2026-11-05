@@ -1,5 +1,5 @@
 # Ablation: same data and citation lines, isolation loss switched off (pairs are still batched together).
-langs: [en, zh]
+langs: [en]
 modes: [base, revise]
 fields: [changed, answer, support, load_bearing]
 pair: true

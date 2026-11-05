@@ -24,7 +24,7 @@ from .data import ALL_FIELDS, WitnessCollator, WitnessDataset, load_processor
 
 HERE = Path(__file__).resolve().parents[1]
 DEFAULTS = {
-    'model': 'Qwen/Qwen3.5-9B', 'workspace': str(HERE.parent), 'data_dir': str(HERE / 'data'), 'langs': ['en', 'zh'], 'splits': ['train'],
+    'model': 'Qwen/Qwen3.5-9B', 'workspace': str(HERE.parent), 'data_dir': str(HERE / 'data'), 'langs': ['en'], 'splits': ['train'],
     'modes': ['base', 'revise'], 'fields': list(ALL_FIELDS), 'pair': True, 'exclude_families': [], 'edit_classes': None, 'max_items': 0,
     'lambda_iso': 0.5, 'lora_r': 32, 'lora_alpha': 64, 'lora_dropout': 0.05, 'lora_merger': False,
     'epochs': 3, 'lr': 1e-4, 'warmup_ratio': 0.03, 'batch_size': 1, 'grad_accum': 8, 'max_length': 6144, 'bf16': True,

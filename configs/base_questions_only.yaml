@@ -1,5 +1,5 @@
 # Ablation: citations learned on base questions only, no revision conversations at all.
-langs: [en, zh]
+langs: [en]
 modes: [base]
 fields: [answer, support, load_bearing]
 pair: false

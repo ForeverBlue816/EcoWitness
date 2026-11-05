@@ -203,7 +203,7 @@ def build_split(split, langs, records, evidence, pools, args, stats):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--splits', nargs='+', default=['train', 'val', 'test'])
-    ap.add_argument('--langs', nargs='+', default=['en', 'zh'])
+    ap.add_argument('--langs', nargs='+', default=['en'])
     ap.add_argument('--out', default=str(HERE / 'data'))
     ap.add_argument('--edits-per-item', type=int, default=EDITS_PER_ITEM)
     ap.add_argument('--chains-per-item', type=int, default=1, help='chains per val/test question')

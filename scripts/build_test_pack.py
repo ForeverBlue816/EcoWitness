@@ -25,6 +25,7 @@ sys.path.insert(0, str(HERE))
 from ecowitness.runner import load_jsonl  # noqa: E402
 
 NAME = 'ecowitness_testpack_v9'
+LANGS = ('en',)   # the released benchmark is English only
 PACK = ROOT / NAME
 PUBLIC_KEYS = ('id', 'qa_id', 'sample_id', 'family', 'group', 'tier', 'lang', 'mode', 'messages')
 EDIT_KEYS = ('type', 'wid', 'old_wid')
@@ -60,7 +61,7 @@ def main():
     (PACK / 'ecowitness').mkdir(parents=True)
     manifest = {'name': NAME, 'source': 'ecowitness/data (built from qualitative_benchmark_20261105_v9)', 'files': {}, 'counts': {}}
     images = set()
-    for lang in ('en', 'zh'):
+    for lang in LANGS:
         test = load_jsonl(HERE / 'data' / f'test.{lang}.jsonl')
         pub = [public_record(r) for r in test]
         for r in pub:

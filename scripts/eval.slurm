@@ -18,7 +18,7 @@ export HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1
 RUN=${RUN:-base}
 ADAPTER=${ADAPTER:-$RUNS_DIR/$RUN/adapter}
 SPLIT=${SPLIT:-test}
-LANGS=${LANGS:-en zh}
+LANGS=${LANGS:-en}
 MODES=${MODES:-base revise chain}
 mkdir -p logs "$RUNS_DIR/$RUN"
 echo "code commit: $(git rev-parse --short HEAD 2>/dev/null)"
