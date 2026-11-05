@@ -21,6 +21,7 @@ SPLIT=${SPLIT:-test}
 LANGS=${LANGS:-en zh}
 MODES=${MODES:-base revise chain}
 mkdir -p logs "$RUNS_DIR/$RUN"
+echo "code commit: $(git rev-parse --short HEAD 2>/dev/null)"
 ADAPTER_ARG=""
 if [ "$ADAPTER" != "none" ]; then ADAPTER_ARG="--adapter $ADAPTER"; fi
 python -m ecowitness.evaluate --model "$MODEL_DIR" $ADAPTER_ARG --data_dir "$DATA_DIR" --workspace "$WORKSPACE" \

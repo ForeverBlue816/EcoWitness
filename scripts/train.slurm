@@ -20,6 +20,7 @@ OUT=$RUNS_DIR/$RUN
 NGPU=${NGPU:-$(nvidia-smi -L | wc -l)}
 mkdir -p "$OUT" logs
 echo "model=$MODEL_DIR data=$DATA_DIR images=$WORKSPACE config=$CONFIG out=$OUT gpus=$NGPU"
+echo "code commit: $(git rev-parse --short HEAD 2>/dev/null) $(git status --porcelain 2>/dev/null | grep -q . && echo "(uncommitted changes)")"
 nvidia-smi -L
 $EW_TORCHRUN --nproc_per_node="$NGPU" --master_port=$((29000 + SLURM_JOB_ID % 1000)) \
   -m ecowitness.train --config "$CONFIG" --model "$MODEL_DIR" --data_dir "$DATA_DIR" --workspace "$WORKSPACE" --output_dir "$OUT" ${TRAIN_EXTRA:-}
