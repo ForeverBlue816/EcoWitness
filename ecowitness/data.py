@@ -30,9 +30,7 @@ def load_processor(path):
 ALL_FIELDS = ('changed', 'answer', 'support', 'load_bearing')
 
 
-def load_jsonl(path):
-    with Path(path).open(encoding='utf8') as f:
-        return [json.loads(l) for l in f if l.strip()]
+from .runner import load_jsonl  # noqa: E402  (shared with the torch-free runner and scorer)
 
 
 def strip_target(target, fields):

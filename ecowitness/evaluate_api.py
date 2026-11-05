@@ -1,32 +1,31 @@
 """Run the witness protocol through an OpenAI-compatible chat API (GPT, Gemini, Qwen-Max, a local vLLM server) as a
-prompt-only baseline, then score with the same metrics as evaluate.py.
+prompt-only baseline, then score with the same metrics as evaluate.py. Needs only `openai` (no torch).
 
     export OPENAI_API_KEY=...; export OPENAI_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1
-    python -m ecowitness.evaluate_api --model qwen3-vl-plus --split test --langs en --modes base revise --out runs/api_qwen
-Images are sent as base64 PNG. Results are cached per record id so an interrupted run can resume.
+    python -m ecowitness.evaluate_api --model qwen3-vl-plus --split test --langs en zh --out runs/api_qwen --no_thinking
+Images are sent as base64 PNG. Replies are cached per conversation so an interrupted run resumes where it stopped.
 """
 from __future__ import annotations
 
 import argparse
 import base64
+import hashlib
 import json
 import os
 import time
 from pathlib import Path
 
-from . import protocol
-from .data import load_jsonl
-from .evaluate import run_chains, score_chains, score_single
+from . import runner
 
 HERE = Path(__file__).resolve().parents[1]
 
 
 class ApiGenerator:
-    def __init__(self, model, workspace, cache_path, temperature=0.0, max_tokens=256, extra_body=None, sleep=0.0):
+    def __init__(self, model, workspace, cache_path, temperature=0.0, max_tokens=256, extra_body=None, sleep=0.0, workers=1):
         from openai import OpenAI
         self.client = OpenAI()
         self.model, self.workspace = model, Path(workspace)
-        self.temperature, self.max_tokens, self.extra_body, self.sleep = temperature, max_tokens, extra_body or {}, sleep
+        self.temperature, self.max_tokens, self.extra_body, self.sleep, self.workers = temperature, max_tokens, extra_body or {}, sleep, workers
         self.cache_path = cache_path
         self.cache = {}
         if cache_path.exists():
@@ -51,73 +50,55 @@ class ApiGenerator:
             out.append({'role': m['role'], 'content': parts})
         return out
 
+    def one(self, msgs):
+        for attempt in range(5):
+            try:
+                resp = self.client.chat.completions.create(model=self.model, messages=self.to_api(msgs), temperature=self.temperature,
+                                                           max_tokens=self.max_tokens, extra_body=self.extra_body)
+                return resp.choices[0].message.content or ''
+            except Exception as ex:  # noqa: BLE001
+                print('retry', attempt, ex, flush=True)
+                time.sleep(2 * (attempt + 1))
+        return ''
+
     def generate(self, message_lists):
-        outs = []
-        for msgs in message_lists:
-            key = json.dumps(msgs, ensure_ascii=False, sort_keys=True)[:4000] + str(hash(json.dumps(msgs, ensure_ascii=False, sort_keys=True)))
-            if key in self.cache:
-                outs.append(self.cache[key])
-                continue
-            for attempt in range(5):
-                try:
-                    resp = self.client.chat.completions.create(model=self.model, messages=self.to_api(msgs), temperature=self.temperature,
-                                                               max_tokens=self.max_tokens, extra_body=self.extra_body)
-                    text = resp.choices[0].message.content or ''
-                    break
-                except Exception as ex:  # noqa: BLE001
-                    print('retry', attempt, ex)
-                    time.sleep(2 * (attempt + 1))
-            else:
-                text = ''
-            self.cache[key] = text
-            with self.cache_path.open('a', encoding='utf8') as f:
-                f.write(json.dumps({'key': key, 'output': text}, ensure_ascii=False) + '\n')
-            outs.append(text)
-            if self.sleep:
-                time.sleep(self.sleep)
-        return outs
+        keys = [hashlib.sha256((self.model + json.dumps(m, ensure_ascii=False, sort_keys=True)).encode()).hexdigest() for m in message_lists]
+        todo = [(k, m) for k, m in zip(keys, message_lists) if k not in self.cache]
+        if todo:
+            from concurrent.futures import ThreadPoolExecutor
+            with ThreadPoolExecutor(max_workers=self.workers) as ex, self.cache_path.open('a', encoding='utf8') as f:
+                for (k, _), text in zip(todo, ex.map(lambda km: self.one(km[1]), todo)):
+                    self.cache[k] = text
+                    f.write(json.dumps({'key': k, 'output': text}, ensure_ascii=False) + '\n')
+                    if self.sleep:
+                        time.sleep(self.sleep)
+        return [self.cache[k] for k in keys]
 
 
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--model', required=True)
-    ap.add_argument('--workspace', default=str(HERE.parent))
+    ap.add_argument('--workspace', default=str(HERE.parent), help='folder that holds satellite_rgb/')
     ap.add_argument('--data_dir', default=str(HERE / 'data'))
     ap.add_argument('--split', default='test')
     ap.add_argument('--langs', nargs='+', default=['en'])
-    ap.add_argument('--modes', nargs='+', default=['base', 'revise'])
+    ap.add_argument('--modes', nargs='+', default=['base', 'revise', 'chain'])
     ap.add_argument('--families', nargs='*', default=None)
     ap.add_argument('--max_items', type=int, default=0)
-    ap.add_argument('--teacher_forced', action='store_true')
+    ap.add_argument('--teacher_forced', action='store_true', help='chains: gold previous answers (needs targets, owner only)')
+    ap.add_argument('--own_history', action='store_true', help='revisions: the model\'s own base answer as its prior reply')
     ap.add_argument('--no_thinking', action='store_true', help='send chat_template_kwargs.enable_thinking=false (vLLM / DashScope)')
+    ap.add_argument('--temperature', type=float, default=0.0)
+    ap.add_argument('--max_tokens', type=int, default=256, help='raise for thinking models whose reasoning counts against the limit')
+    ap.add_argument('--workers', type=int, default=4, help='parallel requests')
     ap.add_argument('--out', required=True)
     a = ap.parse_args()
     out = Path(a.out)
     out.mkdir(parents=True, exist_ok=True)
     extra = {'chat_template_kwargs': {'enable_thinking': False}} if a.no_thinking else None
-    gen = ApiGenerator(a.model, a.workspace, out / 'cache.jsonl', extra_body=extra)
-    metrics = {'model': a.model, 'split': a.split, 'api_base': os.environ.get('OPENAI_BASE_URL')}
-    with (out / 'predictions.jsonl').open('w', encoding='utf8') as pf:
-        for lang in a.langs:
-            rows = load_jsonl(Path(a.data_dir) / f'{a.split}.{lang}.jsonl')
-            if a.families:
-                rows = [r for r in rows if r['family'] in a.families]
-            for mode in a.modes:
-                recs = [r for r in rows if r['mode'] == mode][: a.max_items or None]
-                if not recs:
-                    continue
-                if mode == 'chain':
-                    b, s = run_chains(gen, recs, a.teacher_forced)
-                    metrics[f'{lang}/chain'] = score_chains(recs, b, s)
-                    for r, bo, so in zip(recs, b, s):
-                        pf.write(json.dumps({'id': r['id'], 'base_output': bo, 'step_outputs': so}, ensure_ascii=False) + '\n')
-                else:
-                    preds = gen.generate([r['messages'] for r in recs])
-                    metrics[f'{lang}/{mode}'] = score_single(recs, preds)
-                    for r, p in zip(recs, preds):
-                        pf.write(json.dumps({'id': r['id'], 'output': p, 'parsed': protocol.parse_output(p), 'truth': r['truth']}, ensure_ascii=False) + '\n')
-                print(lang, mode, json.dumps(metrics[f'{lang}/{mode}'], ensure_ascii=False)[:600], flush=True)
-    (out / 'metrics.json').write_text(json.dumps(metrics, ensure_ascii=False, indent=1), encoding='utf8')
+    gen = ApiGenerator(a.model, a.workspace, out / 'cache.jsonl', temperature=a.temperature, max_tokens=a.max_tokens, extra_body=extra, workers=a.workers)
+    runner.run(gen, a.data_dir, a.split, a.langs, a.modes, out, families=a.families, max_items=a.max_items, teacher_forced=a.teacher_forced,
+               own_history=a.own_history, meta={'model': a.model, 'api_base': os.environ.get('OPENAI_BASE_URL'), 'temperature': a.temperature})
 
 
 if __name__ == '__main__':

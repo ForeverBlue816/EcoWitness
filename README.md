@@ -90,18 +90,36 @@ TRAIN_EXTRA="--max_items 2000 --epochs 1" RUN=trial bash scripts/run_all.sh   # 
 作业脚本用 `python -m torch.distributed.run` 启动（不用 torchrun 可执行文件），让各进程继承 venv 的包。
 结果：`$RUNS_DIR/<run>/adapter/`（LoRA）与 `$RUNS_DIR/<run>/eval_test/metrics.json`、`predictions.jsonl`。
 
-## 五、评测指标（evaluate.py）
+## 五、评测：生成与打分分开（runner.py / score.py）
 
-- base：选项准确率（按组、题族、难度）、support / load_bearing 的精确率与召回率、承重集合完全匹配率。
-- revise：修订 F1（changed 的 P/R/F1）、`contagion_rate`（keep_uncited 中被错误改答的比例）、
-  `redundancy_overreaction_rate`（keep_cited 中错误改答）、`inertia_rate`（flip 中没改）、`none_accuracy`（应答 none 的题）。
-- chain：按步准确率（默认用模型自己的历史，`--teacher_forced` 用真值历史）、最后一步准确率。
+`evaluate.py`（本地模型）和 `evaluate_api.py`（OpenAI 兼容 API）共用 `runner.py` 的生成循环，只写 `predictions.jsonl`；
+记录带真值时随后自动打分出 `metrics.json`，不带真值（公开测试包）时出 `check.json`。也可以单独打分：
+```
+python -m ecowitness.score --data data/test.en.jsonl data/test.zh.jsonl --predictions runs/base/eval_test/predictions.jsonl
+```
+指标分五族，定义见 `score.py` 文件头，完整表见 `docs/testpack_README.md` 第 7 节：
+- **accuracy**：按组、题族、难度；自助法 95% 区间。
+- **abstention**：`none` 的 P/R/F1、`false_none_rate`。
+- **citation**：support / load_bearing 的 P/R/F1、`load_bearing_exact`、`sufficiency`（承重证人是否全在 support 里）、
+  `invalid_citation_rate`（编造编号）、`faithful_accuracy`（答对且承重集合全对）。
+- **revision**：按修订类别 / 动作的准确率，`changed_f1`，`contagion_rate`、`redundancy_overreaction_rate`、`inertia_rate`，
+  `flip_accuracy` / `keep_accuracy`，`stale_citation_rate`（引用已撤销的证人），`self_contradiction_rate`。
+- **chain**：按步准确率、末步准确率（+CI、按链长）、整链全对率、`drift`、`recovery_rate` / `slip_rate`。
+- **cross_lingual**：同题中英文答案一致率。
+
+生成选项：`--teacher_forced`（链用真值历史，只有带 target 的数据能用）、`--own_history`（修订题的先前回答换成模型自己的 base 回答，
+此时 `changed` 以模型自己的先前答案为准，传染率 / 惯性率不再定义）。
+
+合成基线（测试集，中英合并）：随机 base 准确率 0.253；“永远不改”在修订题上准确率 0.557 但惯性率 1.0；标准答案全部 1.0。
 
 API 基线：
 ```
 export OPENAI_API_KEY=sk-...; export OPENAI_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1
 python -m ecowitness.evaluate_api --model qwen3-vl-plus --split test --langs en --modes base revise --out runs/api_qwen --no_thinking
 ```
+
+**公开测试包**：`python scripts/build_test_pack.py` 生成 `../ecowitness_testpack_v9/`（不含答案的 test、含答案的 dev、影像、运行与打分代码、
+README）和 tar.gz。外部评测者回传 `predictions.jsonl`，在本目录用 `score.py` 对 `data/test.*.jsonl` 打分。
 
 ## 六、训练细节
 
