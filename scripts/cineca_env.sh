@@ -30,6 +30,9 @@ if [ "${EW_VARS_ONLY:-0}" != "1" ]; then
   module load "$EW_MODULE" || echo "WARNING: module $EW_MODULE failed to load (run: module av cineca-ai)"
   if [ -f "$VENV/bin/activate" ]; then
     source "$VENV/bin/activate"
+    # the module's PYTHONPATH would otherwise shadow the venv's transformers / peft / accelerate
+    VENV_SITE=$(python -c 'import sysconfig; print(sysconfig.get_paths()["purelib"])')
+    export PYTHONPATH="$VENV_SITE${PYTHONPATH:+:$PYTHONPATH}"
   else
     echo "NOTE: venv $VENV not found yet; run scripts/setup_env.sh"
   fi
