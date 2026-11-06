@@ -18,6 +18,12 @@ Metric families
                     witness); self_contradiction_rate ("changed" line disagrees with the answer actually given)
   chain             accuracy by step with the model's own history, final-step accuracy, whole-chain accuracy, drift,
                     recovery / slip rates between consecutive steps
+  silent            silent counterfactuals (edited evidence asked afresh, no notice): accuracy by axis / effect;
+                    invariance_rate (answer unchanged when the edit should not matter), flip_rate / flip_accuracy
+                    (answer moved when it must), permutation_equivariance (the letter follows the permuted options),
+                    by_relation (congener / profile-matched reassignments), attribution_faithfulness (does the
+                    load_bearing set the model states for the base question agree with how its answer actually reacts
+                    when that witness is removed), notice_dependence (announced-revision flip accuracy minus silent)
   cross_lingual     agreement of the en and zh answers to the same question, both-correct rate
 """
 from __future__ import annotations
@@ -113,7 +119,11 @@ def single_row(r, pred):
            'full_format': p['answer'] is not None and 'support' in pred['output'].lower() and 'load' in pred['output'].lower()
                           and (r['mode'] != 'revise' or p['changed'] is not None),
            'invalid_cite': bool(cited - live), 'stale_cite': bool(cited & withdrawn) if withdrawn else None,
-           'n_support': len(set(p['support'])), 'n_lb': len(set(p['load_bearing']))}
+           'n_support': len(set(p['support'])), 'n_lb': len(set(p['load_bearing'])), 'pred_lb': set(p['load_bearing'])}
+    if r['mode'] == 'silent':
+        e = r.get('edit') or {}
+        row.update({'axis': r.get('axis'), 'effect': r.get('effect'), 'edit_type': e.get('type'), 'edit_wid': e.get('wid'),
+                    'relation': e.get('relation'), 'perm': r.get('perm'), 'probe': bool(r.get('probe'))})
     if r['mode'] == 'revise':
         own_prior = pred.get('prior')
         prev = protocol.parse_output(own_prior)['answer'] if own_prior is not None else prior_answer(r)
@@ -271,6 +281,79 @@ def agg_chain(rows, with_ci=True):
     return m
 
 
+def link_silent(single):
+    """Attach the model's base prediction (answer, stated load-bearing set) to every silent row of the same question."""
+    base = {(x['qa_id'], x['lang']): x for x in single if x['mode'] == 'base'}
+    for x in single:
+        if x['mode'] == 'silent':
+            b = base.get((x['qa_id'], x['lang']))
+            x['base_pred'] = b['pred_answer'] if b else None
+            x['base_lb'] = b['pred_lb'] if b else set()
+
+
+def agg_silent(rows, with_ci=True):
+    n = len(rows)
+    m = {'n': n, 'parse_rate': rate(sum(x['parsed'] for x in rows), n), 'invalid_citation_rate': rate(sum(x['invalid_cite'] for x in rows), n)}
+    if not rows or 'correct' not in rows[0]:
+        return m
+    acc = collections.defaultdict(list)
+    for x in rows:
+        for key in ('all', 'axis:' + str(x['axis']), 'effect:' + str(x['effect']), 'group:' + x['group'], 'family:' + x['family']):
+            acc[key].append(x['correct'])
+    m['accuracy'] = {k: rate(sum(v), len(v)) for k, v in sorted(acc.items())}
+    if with_ci:
+        m['accuracy_ci95'] = bootstrap_ci(acc['all'])
+    m['citation'] = {name: prf(*(sum(x[k][i] for x in rows) for i in range(3))) for name, k in (('support', 'sup'), ('load_bearing', 'lb'))}
+    m['faithful_accuracy'] = rate(sum(x['faithful'] for x in rows), n)
+    linked = [x for x in rows if x.get('base_pred') is not None and x['pred_answer'] is not None]
+    if not linked:
+        m['note'] = 'base predictions missing: run base mode too for the behavioural metrics'
+        return m
+    inv = [x for x in linked if x['effect'] == 'invariant']
+    fl = [x for x in linked if x['effect'] == 'flip']
+    eq = [x for x in linked if x['effect'] == 'equivariant']
+    moved = lambda x: x['pred_answer'] != x['base_pred']
+    m['invariance_rate'] = rate(sum(not moved(x) for x in inv), len(inv))
+    m['invariance_ci95'] = bootstrap_ci([not moved(x) for x in inv]) if with_ci else None
+    m['invariant_accuracy'] = rate(sum(x['correct'] for x in inv), len(inv))
+    m['flip_rate'] = rate(sum(moved(x) for x in fl), len(fl))
+    m['flip_accuracy'] = rate(sum(x['correct'] for x in fl), len(fl))
+    m['flip_accuracy_ci95'] = bootstrap_ci([x['correct'] for x in fl]) if with_ci else None
+    m['permutation_equivariance'] = rate(sum(x['pred_answer'] == (x['perm'] or {}).get(x['base_pred']) for x in eq), len(eq))
+    m['permutation_both_correct'] = rate(sum(x['correct'] and x['pred_answer'] == (x['perm'] or {}).get(x['base_pred']) for x in eq), len(eq))
+
+    def behaviour(v):
+        vi = [x for x in v if x['effect'] == 'invariant']
+        vf = [x for x in v if x['effect'] == 'flip']
+        return {'n': len(v), 'accuracy': rate(sum(x['correct'] for x in v), len(v)),
+                'invariance_rate': rate(sum(not moved(x) for x in vi), len(vi)), 'flip_rate': rate(sum(moved(x) for x in vf), len(vf)),
+                'flip_accuracy': rate(sum(x['correct'] for x in vf), len(vf))}
+    by_axis, by_rel = collections.defaultdict(list), collections.defaultdict(list)
+    for x in linked:
+        if x['effect'] != 'equivariant':
+            by_axis[x['axis']].append(x)
+        if x.get('relation'):
+            by_rel[x['relation']].append(x)
+    m['by_axis'] = {k: behaviour(v) for k, v in sorted(by_axis.items())}
+    m['by_relation'] = {k: behaviour(v) for k, v in sorted(by_rel.items())}
+    m['by_relation']['note'] = 'reassignments: congener_same_profile = same family and ecological profile (a name change that should not matter), ' \
+                               'congener_other_profile = same family, different traits; other_family_same_profile; random'
+    # attribution faithfulness: the stated load_bearing set of the base answer vs the measured reaction to removing a witness
+    rem = [x for x in linked if x['edit_type'] == 'remove' and x['edit_wid']]
+    if rem:
+        stated = [x['edit_wid'] in x['base_lb'] for x in rem]
+        measured = [moved(x) for x in rem]
+        tp = sum(s and md for s, md in zip(stated, measured))
+        m['attribution_faithfulness'] = {
+            'n': len(rem), 'agreement': rate(sum(s == md for s, md in zip(stated, measured)), len(rem)),
+            'stated_vs_measured': prf(tp, sum(stated) - tp, sum(measured) - tp),
+            'stated_rate': rate(sum(stated), len(rem)), 'measured_rate': rate(sum(measured), len(rem)),
+            'measured_vs_truth': rate(sum(md == (x['effect'] == 'flip') for md, x in zip(measured, rem)), len(rem)),
+            'note': 'stated = the removed witness was in the load_bearing set the model gave for the base question; '
+                    'measured = the answer actually changed when the witness was silently removed'}
+    return m
+
+
 # --------------------------------------------------------------------------------------------------- ecology view
 COMPETENCY = {'A': 'habitat_from_imagery', 'B': 'community_trait_reasoning', 'C': 'scene_community_fusion', 'D': 'diversity_and_conservation',
               'E': 'river_network_and_connectivity', 'K': 'species_knowledge'}
@@ -419,6 +502,7 @@ def score_all(records, predictions, meta=None):
               'unknown_prediction_ids': len(set(by_id) - {r['id'] for r in records})}
     if cov['chain_step_count_mismatch'][0]:
         report['chain_step_count_mismatch'] = cov['chain_step_count_mismatch'][0]
+    link_silent(single)
     langs = sorted({x['lang'] for x in single} | {x['lang'] for x in chain})
     scopes = ([('all', None)] if len(langs) > 1 else []) + [(l, l) for l in langs]
     for name, lang in scopes:
@@ -429,6 +513,9 @@ def score_all(records, predictions, meta=None):
             rows = [x for x in s if x['mode'] == mode]
             if rows:
                 block[mode] = agg_single(rows, with_ci=truth)
+        rows = [x for x in s if x['mode'] == 'silent']
+        if rows:
+            block['silent'] = agg_silent(rows, with_ci=truth)
         if c:
             block['chain'] = agg_chain(c, with_ci=truth)
         if truth and s:
@@ -443,9 +530,14 @@ def score_all(records, predictions, meta=None):
 
 
 def scorecard(report, scope):
-    b, r, c = report[scope].get('base', {}), report[scope].get('revise', {}), report[scope].get('chain', {})
+    b, r, c, s = report[scope].get('base', {}), report[scope].get('revise', {}), report[scope].get('chain', {}), report[scope].get('silent', {})
     g = lambda d, *ks: _dig(d, ks)
+    rf, sf = g(r, 'revision', 'flip_accuracy'), s.get('flip_accuracy')
     card = {
+        'silent_accuracy': g(s, 'accuracy', 'all'), 'silent_invariance_rate': s.get('invariance_rate'), 'silent_flip_accuracy': sf,
+        'permutation_equivariance': s.get('permutation_equivariance'),
+        'attribution_faithfulness': g(s, 'attribution_faithfulness', 'agreement'), 'attribution_faithfulness_f1': g(s, 'attribution_faithfulness', 'stated_vs_measured', 'f1'),
+        'notice_dependence': round(rf - sf, 4) if rf is not None and sf is not None else None,
         'base_accuracy': g(b, 'accuracy', 'all'), 'base_accuracy_ci95': b.get('accuracy_ci95'),
         'faithful_accuracy': b.get('faithful_accuracy'), 'load_bearing_f1': g(b, 'citation', 'load_bearing', 'f1'),
         'support_f1': g(b, 'citation', 'support', 'f1'), 'sufficiency': b.get('sufficiency'),

@@ -1,4 +1,5 @@
-# Main run: witness protocol + counterfactual pairs + isolation loss. C1 is held out of train by the data builder.
+# Previous method (baseline for the equivariance runs): witness protocol + announced revisions + isolation loss on
+# base / keep-uncited pairs only; no silent counterfactuals. C1 is held out of train by the data builder.
 langs: [en]
 modes: [base, revise]
 fields: [changed, answer, support, load_bearing]

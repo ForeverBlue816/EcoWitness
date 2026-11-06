@@ -23,13 +23,17 @@ load_bearing: [SP-03]
 - `load_bearing`: witnesses whose removal **alone** would change the answer.
 - After a revision notice, a first line `changed: yes` or `changed: no` is added.
 
-Three record kinds (`mode`):
+Four record kinds (`mode`):
 
 | mode | content | generations per record |
 |---|---|---|
 | `base` | the question | 1 |
+| `silent` | the same question with the evidence **silently edited** (a species reassigned to a relative, a trait, read share or conservation status changed, a witness removed or added, the image or a record field replaced, or only the options reordered); asked as a fresh question, no notice, no previous reply | 1 |
 | `revise` | question + the model's previous reply (given) + one revision notice (withdraw, add, reassign, correct a field, replace the image) | 1 |
 | `chain` | question + 2–5 successive revisions; each step is asked with **the model's own previous replies** in the history | 1 + number of steps |
+
+`silent` records are scored against the model's own `base` reply to the same question (did the answer stay when it
+should, move when it must, follow the options when they were reordered), so run `base` whenever you run `silent`.
 
 31 question families in six groups (`group`): A habitat from imagery, B community trait reasoning from DNA cards,
 C scene–community fusion and image timing, D diversity and conservation (threatened records, detection plausibility,
@@ -56,8 +60,8 @@ Sizes:
 
 A conversation is usually 1–2k tokens of text (the longest about 5k) plus one or two images. Two tracks:
 
-- **minimal**: `--modes base revise` (no chains).
-- **full**: `--modes base revise chain`.
+- **minimal**: `--modes base silent revise` (no chains).
+- **full**: `--modes base silent revise chain`.
 
 ## 3. Running
 
@@ -68,7 +72,7 @@ pip install -r requirements_api.txt
 export OPENAI_API_KEY=...
 export OPENAI_BASE_URL=...          # e.g. https://dashscope.aliyuncs.com/compatible-mode/v1
 python -m ecowitness.evaluate_api --model <model> --data_dir . --workspace . \
-    --split test --langs en --modes base revise chain --workers 4 --out runs/<model>
+    --split test --langs en --modes base silent revise chain --workers 4 --out runs/<model>
 ```
 
 - Images are sent as base64 PNG. Temperature defaults to 0.
@@ -81,7 +85,7 @@ python -m ecowitness.evaluate_api --model <model> --data_dir . --workspace . \
 ```bash
 pip install -r requirements_local.txt
 python -m ecowitness.evaluate --model <path> --data_dir . --workspace . \
-    --split test --langs en --modes base revise chain --batch_size 8 --out runs/<model>
+    --split test --langs en --modes base silent revise chain --batch_size 8 --out runs/<model>
 ```
 Greedy decoding; `--max_new_tokens 64` is enough (the reply is three or four lines). Add `--adapter <path>` for a LoRA.
 
@@ -91,6 +95,7 @@ Produce `predictions.jsonl` in this format, one record per line:
 
 ```json
 {"id": "Q9_..|en|base",  "lang": "en", "mode": "base",   "output": "answer: B\nsupport: [...]\nload_bearing: [...]"}
+{"id": "Q9_..|en|s1",    "lang": "en", "mode": "silent", "output": "answer: B\nsupport: [...]\nload_bearing: [...]"}
 {"id": "Q9_..|en|e2",    "lang": "en", "mode": "revise", "output": "changed: yes\nanswer: none\n..."}
 {"id": "Q9_..|en|chain", "lang": "en", "mode": "chain",  "history": "own", "base_output": "...", "step_outputs": ["...", "..."]}
 ```
@@ -158,6 +163,18 @@ max tokens, and which modes you ran.
 | `revision.stale_citation_rate` | still cites a witness the revision withdrew |
 | `revision.self_contradiction_rate` | `changed` line disagrees with whether the answer actually changed |
 | `revision.accuracy_truth_none` | accuracy on revisions whose correct answer is `none` |
+
+**silent** (edited evidence asked afresh; compared with the model's own `base` reply)
+
+| metric | meaning |
+|---|---|
+| `accuracy` | overall and by edit axis (`axis:taxonomy`, `axis:trait`, `axis:abundance`, `axis:status`, `axis:witness`, `axis:image`, `axis:record`), by effect and by family |
+| `invariance_rate` | edits that should not matter (a congener with the same ecological profile, a trait of an unrelated species, a read share that stays on the same side of the threshold, an uncited witness …): the answer stayed the same |
+| `flip_rate` / `flip_accuracy` | edits that must change the answer: the answer moved; the answer moved to the right option (or `none`) |
+| `permutation_equivariance` | the options were reordered and the chosen letter followed its option |
+| `by_axis` / `by_relation` | the three numbers above per axis, and per reassignment relation (`congener_same_profile`, `congener_other_profile`, `other_family_same_profile`, `random`) |
+| `attribution_faithfulness` | for silent witness removals: agreement between what the model **stated** as load-bearing in its `base` reply and how its answer **actually reacted** when that witness was removed; precision / recall / F1 of the stated set as a predictor of the measured reaction |
+| `notice_dependence` (scorecard) | flip accuracy with a revision notice minus flip accuracy on silent flips; large values mean the model follows notices rather than evidence |
 
 **chain** (own history)
 

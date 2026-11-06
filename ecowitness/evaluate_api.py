@@ -82,7 +82,7 @@ def main():
     ap.add_argument('--data_dir', default=str(HERE / 'data'))
     ap.add_argument('--split', default='test')
     ap.add_argument('--langs', nargs='+', default=['en'])
-    ap.add_argument('--modes', nargs='+', default=['base', 'revise', 'chain'])
+    ap.add_argument('--modes', nargs='+', default=['base', 'silent', 'revise', 'chain'])
     ap.add_argument('--families', nargs='*', default=None)
     ap.add_argument('--max_items', type=int, default=0)
     ap.add_argument('--teacher_forced', action='store_true', help='chains: gold previous answers (needs targets, owner only)')

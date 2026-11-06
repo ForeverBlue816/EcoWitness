@@ -119,6 +119,8 @@ def revision_message(edit, lang):
             text = f'Revision: [{edit["wid"]}] {edit["field"]} is corrected to {fmt_val(edit["new"])} (previously {fmt_val(edit["old"])}). Re-evaluate the question above.'
         elif t == 'swap_image':
             text = f'Revision: [{edit["old_wid"]}] is withdrawn. The image below, [{edit["wid"]}], acquired on {edit["date"]}, replaces it. Re-evaluate the question above.'
+        elif t == 'set_card':
+            text = f'Revision: [{edit["wid"]}] ({edit["name"]}) {edit["key"]} is corrected to {fmt_val(edit["new"])} (previously {fmt_val(edit["old"])}). Re-evaluate the question above.'
         else:
             raise ValueError(t)
     else:
@@ -132,6 +134,8 @@ def revision_message(edit, lang):
             text = f'修订：[{edit["wid"]}] {edit["field"]} 更正为 {fmt_val(edit["new"])}（原为 {fmt_val(edit["old"])}）。请对上面的问题重新判断。'
         elif t == 'swap_image':
             text = f'修订：[{edit["old_wid"]}] 已撤销，由下面这幅拍摄于 {edit["date"]} 的影像 [{edit["wid"]}] 替代。请对上面的问题重新判断。'
+        elif t == 'set_card':
+            text = f'修订：[{edit["wid"]}]（{edit["name"]}）的 {edit["key"]} 更正为 {fmt_val(edit["new"])}（原为 {fmt_val(edit["old"])}）。请对上面的问题重新判断。'
         else:
             raise ValueError(t)
     if t == 'swap_image':

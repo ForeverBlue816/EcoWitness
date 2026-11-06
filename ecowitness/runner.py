@@ -17,7 +17,7 @@ from pathlib import Path
 
 from . import protocol
 
-MODE_ORDER = {'base': 0, 'revise': 1, 'chain': 2}
+MODE_ORDER = {'base': 0, 'silent': 1, 'revise': 2, 'chain': 3}
 
 
 def load_jsonl(path):

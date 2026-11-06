@@ -1,0 +1,20 @@
+# Ablation: equivariance training with the generic axes only (witness removal / addition, image swap, record field,
+# option permutation); the ecological axes (taxonomy, trait, abundance, status) are dropped from the silent records.
+langs: [en]
+modes: [base, revise, silent]
+fields: [changed, answer, support, load_bearing]
+pair: true
+silent_axes: [witness, image, record, presentation]
+companions: ['silent:invariant', 'silent:flip', 'silent:equivariant', 'revise:keep_uncited']
+group_size: 3
+group_budget: 8000
+lambda_iso: 0.5
+lambda_flip: 0.5
+flip_margin: 1.0
+lora_r: 32
+lora_alpha: 64
+epochs: 2
+lr: 1.0e-4
+batch_size: 1
+grad_accum: 8
+max_length: 6144

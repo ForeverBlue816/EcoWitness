@@ -1,7 +1,7 @@
 #!/bin/bash
 # One-click pipeline on Leonardo (run from $HOME/ecowitness): checks -> train -> eval, chained with SLURM dependencies.
-#   bash scripts/run_all.sh                    # main run (configs/base.yaml) + zero-shot baseline evaluation
-#   RUN=no_iso CONFIG=configs/no_isolation.yaml bash scripts/run_all.sh
+#   bash scripts/run_all.sh                    # main run (configs/equivariance.yaml) + zero-shot baseline evaluation
+#   RUN=base CONFIG=configs/base.yaml bash scripts/run_all.sh     # previous method: SFT + isolation loss
 #   bash scripts/run_all.sh zeroshot           # only the zero-shot evaluation
 #   bash scripts/run_all.sh ablations          # every config in configs/ (each train + eval)
 #   TRAIN_EXTRA="--max_items 2000 --epochs 1" RUN=trial bash scripts/run_all.sh    # small trial run
@@ -30,7 +30,7 @@ case "${1:-main}" in
   ablations)
     for cfg in configs/*.yaml; do submit_pair "$(basename "$cfg" .yaml)" "$cfg"; done ;;
   main|*)
-    submit_pair "${RUN:-base}" "${CONFIG:-configs/base.yaml}"
+    submit_pair "${RUN:-equivariance}" "${CONFIG:-configs/equivariance.yaml}"
     RUN=zeroshot ADAPTER=none sbatch -A "$EW_ACCOUNT" -p "$EW_PARTITION" scripts/eval.slurm ;;
 esac
 squeue -u "$USER"

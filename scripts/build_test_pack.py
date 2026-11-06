@@ -34,7 +34,7 @@ CODE = ['__init__.py', 'protocol.py', 'runner.py', 'score.py', 'evaluate.py', 'e
 
 def public_record(r):
     p = {k: r[k] for k in PUBLIC_KEYS}
-    if r['mode'] == 'revise':
+    if r['mode'] in ('revise', 'silent'):   # silent: the edit type / witness id only; axis, effect and the permutation stay private
         p['edit'] = {k: r['edit'][k] for k in EDIT_KEYS if k in r['edit']}
     if r['mode'] == 'chain':
         p['steps'] = [{'message': s['message'], 'edit': {k: s['edit'][k] for k in EDIT_KEYS if k in s['edit']}} for s in r['steps']]
@@ -66,15 +66,15 @@ def main():
         pub = [public_record(r) for r in test]
         for r in pub:
             blob = json.dumps(r, ensure_ascii=False)
-            assert '"truth"' not in blob and '"target"' not in blob and 'edit_class' not in blob, r['id']
+            assert all(k not in blob for k in ('"truth"', '"target"', 'edit_class', '"axis"', '"effect"', '"perm"', 'base_answer')), r['id']
         out = PACK / f'test.public.{lang}.jsonl'
         out.write_text(''.join(json.dumps(r, ensure_ascii=False) + '\n' for r in pub), encoding='utf8')
-        manifest['counts'][f'test.{lang}'] = {m: sum(r['mode'] == m for r in pub) for m in ('base', 'revise', 'chain')}
+        manifest['counts'][f'test.{lang}'] = {m: sum(r['mode'] == m for r in pub) for m in ('base', 'silent', 'revise', 'chain')}
         manifest['counts'][f'test.{lang}']['chain_steps'] = sum(len(r['steps']) for r in pub if r['mode'] == 'chain')
         images.update(images_of(test))
         dev = load_jsonl(HERE / 'data' / f'val.{lang}.jsonl')
         (PACK / f'dev.{lang}.jsonl').write_text(''.join(json.dumps(r, ensure_ascii=False) + '\n' for r in dev), encoding='utf8')
-        manifest['counts'][f'dev.{lang}'] = {m: sum(r['mode'] == m for r in dev) for m in ('base', 'revise', 'chain')}
+        manifest['counts'][f'dev.{lang}'] = {m: sum(r['mode'] == m for r in dev) for m in ('base', 'silent', 'revise', 'chain')}
         images.update(images_of(dev))
     (PACK / 'satellite_rgb').mkdir()
     for p in sorted(images):

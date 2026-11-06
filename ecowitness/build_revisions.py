@@ -1,8 +1,15 @@
 """Build the EcoWitness dataset from the benchmark (v9 by default, EW_BENCH selects another): witness-protocol base
-questions, single-step counterfactual revisions (flip / keep-cited / keep-uncited) and multi-step revision chains.
+questions, single-step counterfactual revisions (flip / keep-cited / keep-uncited), multi-step revision chains, and
+silent counterfactuals (the edited evidence asked as a fresh question: no notice, no previous reply) along the
+ecological axes (taxonomy, trait, abundance, status) and the generic ones (witness, image, record, presentation).
 
 Run from the `ecowitness` directory (needs the benchmark release, its tools and the v5 source reports next to it):
-    python -m ecowitness.build_revisions --splits train val test --langs en zh --out data
+    python -m ecowitness.build_revisions --splits train val test --langs en --out data
+
+Record modes: base, revise, chain (unchanged from v1 of the data; same seeds, byte-identical), silent (new).
+A silent record carries `axis`, `effect` (invariant / flip / equivariant), `edit_class`, `base_answer` and, for a
+permutation, `perm` (old letter -> new letter). Val/test also get removal probes (one load-bearing and one other
+witness removed) for the attribution-faithfulness metric.
 """
 from __future__ import annotations
 
@@ -21,6 +28,9 @@ V8 = rules.V8
 V5 = ROOT / 'qualitative_vqa_20261023_v5'
 A_EDITS = 1          # image families: one swap per question (the image is the only witness)
 EDITS_PER_ITEM = 4
+SILENT_PER_ITEM = 2  # silent counterfactuals per question: one invariant + one flip, ecological axes first
+PERM_RATE = 0.5      # share of train questions that also get an option-permuted copy (val/test: every question)
+PROBE_REMOVALS = 2   # val/test: silent removals of one load-bearing and one other witness (attribution faithfulness)
 
 
 def jsonl(path):
@@ -96,6 +106,102 @@ def select_edits(cands, fam, rng, n_max):
     spare = by['flip'][2:] + by['keep_uncited'][1:] + by['keep_cited'][1:]
     out += spare[: max(0, n_max - len(out))]
     return out[:n_max]
+
+
+def select_silent(cands, rng, n):
+    """cands: list of (edit, states, analysis, cls). Alternate invariant / flip picks, ecological axes before generic
+    ones, random within an axis group."""
+    def ordered(xs):
+        eco = [x for x in xs if x[0]['axis'] in rules.ECO_AXES]
+        gen = [x for x in xs if x[0]['axis'] not in rules.ECO_AXES]
+        rng.shuffle(eco)
+        rng.shuffle(gen)
+        return eco + gen
+    inv = ordered([x for x in cands if x[3] != 'flip'])
+    fl = ordered([x for x in cands if x[3] == 'flip'])
+    out = []
+    for i in range(n):
+        first, second = (inv, fl) if i % 2 == 0 else (fl, inv)
+        src = first if first else second
+        if src:
+            out.append(src.pop(0))
+    return out
+
+
+def try_edit(edit, states, langs, pools):
+    """Apply one edit in every language; -> (edit, new states, analyses) or None when it is ill-posed."""
+    e = copy.deepcopy(edit)
+    try:
+        ns = {lang: rules.apply_edit(states[lang], copy.deepcopy(e) if lang != 'en' else e, pools) for lang in langs}
+    except (StopIteration, KeyError, ValueError):
+        return None
+    ana = {lang: rules.analyse(ns[lang]) for lang in langs}
+    if any(a is None for a in ana.values()):
+        return None
+    if len({a['answer'] for a in ana.values()}) != 1:
+        raise AssertionError(f'language disagreement after edit {e}')
+    return e, ns, ana
+
+
+def silent_records(r, recs, p, lab, states, base, langs, pools, split, args, stats, meta):
+    """Silent counterfactuals for one question: edited evidence asked afresh (no notice), removal probes (val/test)
+    and an option permutation."""
+    fam = r['task']
+    rng = random.Random(f'{args.seed}:{r["qa_id"]}:silent')
+    cands = []
+    edits = rules.ecological_edits(states['en'], pools, rng)
+    # generic edits; a sampling-date change is announced in the context text, not in the evidence, so it cannot be silent
+    edits += [e for e in rules.candidate_edits(states['en'], pools, rng, split) if not (e['type'] == 'set_field' and e.get('field') == 'sampling_date')]
+    for edit in edits:
+        t = try_edit(edit, states, langs, pools)
+        if t is None:
+            stats[split]['ill_posed_silent'][fam] += 1
+            continue
+        e, ns, ana = t
+        cands.append((e, ns, ana, classify(e, base['en'], ana['en'])))
+    chosen = select_silent(cands, rng, args.silent_per_item)
+    if split != 'train' and args.probe_removals:
+        lb = set(base['en']['load_bearing'])
+        rem = rules.removable(states['en'])
+        picks = rng.sample([w for w in rem if w in lb], min(1, sum(w in lb for w in rem))) + rng.sample([w for w in rem if w not in lb], min(args.probe_removals - 1, sum(w not in lb for w in rem)))
+        for wid in picks:
+            t = try_edit({'type': 'remove', 'wid': wid, 'axis': 'witness', 'probe': True}, states, langs, pools)
+            if t is not None:
+                e, ns, ana = t
+                chosen.append((e, ns, ana, classify(e, base['en'], ana['en'])))
+    out = {lang: [] for lang in langs}
+    k = 0
+    for e, ns, ana, cls in chosen:
+        k += 1
+        effect = 'flip' if cls == 'flip' else 'invariant'
+        for lang in langs:
+            truth = {kk: ana[lang][kk] for kk in ('answer', 'support', 'load_bearing')}
+            msgs = [{'role': 'system', 'content': protocol.SYSTEM[lang]}, protocol.user_message(ns[lang], recs[lang], lang)]
+            out[lang].append({'id': f'{r["qa_id"]}|{lang}|s{k}', 'mode': 'silent', 'lang': lang, **meta, 'messages': msgs,
+                              'target': protocol.render_target(truth, False), 'truth': truth, 'pair_id': r['qa_id'], 'edit_class': cls,
+                              'edit': public_edit(e), 'axis': e['axis'], 'effect': effect, 'base_answer': base[lang]['answer'], 'probe': bool(e.get('probe'))})
+        stats[split]['silent_axis'][e['axis']] += 1
+        stats[split]['silent_effect'][effect] += 1
+        if e.get('relation'):
+            stats[split]['silent_relation'][e['relation']] += 1
+    # option permutation: same evidence, moved options -> the answer letter moves with them
+    if rng.random() < (args.perm_rate if split == 'train' else 1.0):
+        k += 1
+        perm = rules.random_perm(list(r['options']), rng)
+        for lang in langs:
+            prec = rules.permute_options(recs[lang], perm)
+            st = rules.build_state(prec, p, lang, lab)
+            ana = rules.analyse(st)
+            assert ana is not None and ana['answer'] == perm[base[lang]['answer']], r['qa_id']
+            truth = {kk: ana[kk] for kk in ('answer', 'support', 'load_bearing')}
+            msgs = [{'role': 'system', 'content': protocol.SYSTEM[lang]}, protocol.user_message(st, prec, lang)]
+            out[lang].append({'id': f'{r["qa_id"]}|{lang}|s{k}', 'mode': 'silent', 'lang': lang, **meta, 'messages': msgs,
+                              'target': protocol.render_target(truth, False), 'truth': truth, 'pair_id': r['qa_id'], 'edit_class': 'permute',
+                              'edit': {'type': 'permute'}, 'axis': 'presentation', 'effect': 'equivariant', 'base_answer': base[lang]['answer'],
+                              'perm': {**perm, 'none': 'none'}, 'probe': False})
+        stats[split]['silent_axis']['presentation'] += 1
+        stats[split]['silent_effect']['equivariant'] += 1
+    return out
 
 
 def build_split(split, langs, records, evidence, pools, args, stats):
@@ -197,6 +303,11 @@ def build_split(split, langs, records, evidence, pools, args, stats):
                                       'target': protocol.render_target(base[lang], False), 'truth': {k: base[lang][k] for k in ('answer', 'support', 'load_bearing')},
                                       'pair_id': pair_id, 'edit_class': None, 'edit': None, 'steps': steps[lang]})
                 stats[split]['chains'][len(steps['en'])] += 1
+        # ---- silent counterfactuals (own RNG stream: base / revise / chain records above stay byte-identical)
+        if args.silent_per_item or args.probe_removals:
+            srows = silent_records(r, recs, p, lab, states, base, langs, pools, split, args, stats, meta)
+            for lang in langs:
+                out[lang].extend(srows[lang])
     return out
 
 
@@ -208,6 +319,9 @@ def main():
     ap.add_argument('--edits-per-item', type=int, default=EDITS_PER_ITEM)
     ap.add_argument('--chains-per-item', type=int, default=1, help='chains per val/test question')
     ap.add_argument('--train-chains', type=int, default=0, help='chains per train question (0 = single-step training only)')
+    ap.add_argument('--silent-per-item', type=int, default=SILENT_PER_ITEM, help='silent counterfactuals per question (0 = none)')
+    ap.add_argument('--perm-rate', type=float, default=PERM_RATE, help='share of train questions with an option-permuted copy (val/test: all)')
+    ap.add_argument('--probe-removals', type=int, default=PROBE_REMOVALS, help='val/test: silent witness removals per question for attribution faithfulness')
     ap.add_argument('--holdout-families', nargs='*', default=['C1-SceneAndCommunity'], help='families removed from train (compositional generalisation)')
     ap.add_argument('--seed', default='ecowitness-v1')
     ap.add_argument('--limit', type=int, default=0, help='debug: only the first N questions per split')

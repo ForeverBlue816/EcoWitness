@@ -58,7 +58,7 @@ def main():
     ap.add_argument('--data_dir', default=str(HERE / 'data'))
     ap.add_argument('--split', default='test')
     ap.add_argument('--langs', nargs='+', default=['en'])
-    ap.add_argument('--modes', nargs='+', default=['base', 'revise', 'chain'])
+    ap.add_argument('--modes', nargs='+', default=['base', 'silent', 'revise', 'chain'])
     ap.add_argument('--families', nargs='*', default=None)
     ap.add_argument('--max_items', type=int, default=0, help='per mode and language (0 = all)')
     ap.add_argument('--batch_size', type=int, default=8)

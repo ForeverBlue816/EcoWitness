@@ -1,0 +1,21 @@
+# Main method: witness protocol + counterfactual equivariance.
+# Groups: base question + silent invariant / flip / permuted companions (+ the announced keep-uncited revision when room).
+# Loss: CE + lambda_iso * symmetric KL (invariant, permuted) + lambda_flip * hinge (flip). C1 is held out of train by the data builder.
+langs: [en]
+modes: [base, revise, silent]
+fields: [changed, answer, support, load_bearing]
+pair: true
+companions: ['silent:invariant', 'silent:flip', 'silent:equivariant', 'revise:keep_uncited']
+group_size: 3
+group_budget: 8000     # approx tokens of a padded group (members x longest member)
+lambda_iso: 0.5
+lambda_flip: 0.5
+flip_margin: 1.0
+lora_r: 32
+lora_alpha: 64
+lora_dropout: 0.05
+epochs: 2              # ~136k train conversations per epoch (base + revise + silent); about the cost of base.yaml's 3 x 86k
+lr: 1.0e-4
+batch_size: 1
+grad_accum: 8
+max_length: 6144

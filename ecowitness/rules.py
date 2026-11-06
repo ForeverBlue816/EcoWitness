@@ -453,6 +453,12 @@ def apply_edit(st, edit, pools):
             edit['old'] = s.record.get(edit['field'])
             s.record[edit['field']] = edit['new']
             edit['wid'] = s.record_wids[edit['field']]
+    elif t == 'set_card':   # one attribute / status field of a species card (trait, read share, conservation status, family)
+        c = s.card_by_wid(edit['wid'])
+        slot = c.setdefault(edit['slot'], {})
+        edit['old'] = slot.get(edit['key'])
+        slot[edit['key']] = edit['new']
+        edit['name'] = c['taxon_label']
     elif t == 'swap_image':
         im = pools.images[edit['sample_id']]
         n = int(re.sub(r'\D', '', s.image['wid']) or 1) + 1
@@ -473,6 +479,139 @@ def touches(edit, wids):
     """Does the edit touch any witness in `wids`?"""
     ids = {edit.get('wid'), edit.get('old_wid')}
     return bool(ids & set(wids))
+
+
+# ----------------------------------------------------------------------------- edit axes
+# Every edit lies on one axis. The ecological axes (taxonomy, trait, abundance, status) change the biology of a card and
+# leave its witness id in place; the generic axes change which witnesses exist (witness), the image, a site-record field
+# (record) or only the presentation of the options (presentation: a permutation, under which the answer letter moves).
+ECO_AXES = ('taxonomy', 'trait', 'abundance', 'status')
+GENERIC_AXES = ('witness', 'image', 'record', 'presentation')
+STATUS_VALUE_KEYS = ('iucn_category', 'national_protection_status', 'native_flag', 'alien_flag', 'invasive_flag', 'invasion_region')
+CARD_PROFILE_SKIP = {'read_share', 'family'}   # per-sample / taxonomic fields, not part of a species' ecological profile
+
+
+def axis_of(edit):
+    t = edit['type']
+    if t in ('remove', 'add'):
+        return 'witness'
+    if t == 'swap_image':
+        return 'image'
+    if t == 'set_field':
+        return 'record'
+    if t == 'reassign':
+        return 'taxonomy'
+    if t == 'permute':
+        return 'presentation'
+    if t == 'set_card':
+        if edit['key'] == 'read_share':
+            return 'abundance'
+        return 'trait' if edit['slot'] == 'attributes' else 'status'
+    raise ValueError(t)
+
+
+def card_profile(c):
+    """The ecological profile of a card: its attributes and status fields except the per-sample / taxonomic ones."""
+    return {('attributes', k): v for k, v in (c.get('attributes') or {}).items()} | \
+           {('status', k): v for k, v in (c.get('status') or {}).items() if k not in CARD_PROFILE_SKIP}
+
+
+def share_candidates(st, card):
+    """Read-share values for `card` around the thresholds the family's rule uses, plus a halving and a doubling. The
+    shares of a sample sum to at most 1, so a value never exceeds what the other species leave."""
+    fam, p = st.family, st.params
+    share = status(card, 'read_share')
+    room = round(1.0 - sum((status(c, 'read_share') or 0) for c in st.cards if c is not card), 4)
+    thr = []
+    if fam == 'D8-RareDetectionCount':
+        thr = [round(p['threshold_pct'] / 100, 4)]
+    elif fam == 'D9-DominanceClass':
+        thr = list(div.D9_BOUNDS)
+    elif fam == 'D7-ReadDominance':
+        thr = [max(status(c, 'read_share') or 0 for c in st.cards)]
+    vals = {round(share / 2, 4), round(min(share * 2, room), 4)}
+    for t in thr:
+        vals.update({round(t + 0.01, 4), round(max(t - 0.01, 0.0002), 4)})
+    return sorted(v for v in vals if 0.0001 <= v <= room and abs(v - share) > 0.0005)
+
+
+def ecological_edits(st, pools, rng, per_card=3):
+    """Edits along the ecological axes for up to `per_card` cards: congener / profile-matched reassignments (taxonomy),
+    a changed functional trait (trait), a changed read share (abundance), a changed conservation or origin field
+    (status). Which of them flip the answer is decided by the rules afterwards, not here."""
+    fam = st.family
+    E = []
+    if not st.cards or fam[0] == 'A' or fam in ('C3-ImageTiming', 'B5-GatedTrace'):
+        return E
+    present = {c['taxon_label'] for c in st.cards}
+    pool = pools.pool_for(fam, st.params, present)
+    pset = pools.pool_set(fam, st.params)
+    for c in rng.sample(st.cards, min(per_card, len(st.cards))):
+        # --- taxonomy: same family with the same ecological profile (a congener that should not matter), same family with
+        #     a different profile, or another family with the same profile
+        if pool and fam != 'B4-PairedProfile':
+            prof = card_profile(c)
+            fam_name = div.family_of(c['taxon_label'])
+            congeners = [n for n in pools.names_in_family(fam_name) if n in pset and n not in present] if fam_name else []
+            rng.shuffle(congeners)
+            same, diff = [], []
+            for n in congeners:
+                (same if card_profile(make_card(pools.taxa[n], c)) == prof else diff).append(n)
+                if len(same) >= 2 and len(diff) >= 1:
+                    break
+            cross = []
+            for n in rng.sample(pool, min(60, len(pool))):
+                if div.family_of(n) != fam_name and card_profile(make_card(pools.taxa[n], c)) == prof:
+                    cross.append(n)
+                    if len(cross) >= 1:
+                        break
+            for rel, names in (('congener_same_profile', same[:2]), ('congener_other_profile', diff[:1]), ('other_family_same_profile', cross)):
+                E += [{'type': 'reassign', 'wid': c['wid'], 'name': n, 'relation': rel} for n in names]
+        # --- trait: one functional attribute set to another value of its vocabulary
+        for k, v in (c.get('attributes') or {}).items():
+            if k in bv.FUNC:
+                others = [x for x in bv.FUNC[k] if x != v]
+                E.append({'type': 'set_card', 'wid': c['wid'], 'slot': 'attributes', 'key': k, 'new': rng.choice(others)})
+        # --- abundance: read share moved around the thresholds of the rule
+        if status(c, 'read_share') is not None:
+            cands = share_candidates(st, c)
+            E += [{'type': 'set_card', 'wid': c['wid'], 'slot': 'status', 'key': 'read_share', 'new': v} for v in rng.sample(cands, min(3, len(cands)))]
+        # --- status: conservation category, protection class, origin flags, detection frequency, family
+        for k, v in (c.get('status') or {}).items():
+            if k in STATUS_VALUE_KEYS:
+                others = [x for x in pools.status_values.get(k, []) if x != v]
+                if others:
+                    E.append({'type': 'set_card', 'wid': c['wid'], 'slot': 'status', 'key': k, 'new': rng.choice(others)})
+            elif k == 'national_detection_frequency' and v is not None:
+                thr = [div.FLAG_OCCUPANCY] + ([st.params['threshold_pct'] / 100] if 'threshold_pct' in st.params else [])
+                cands = sorted({round(v / 2, 4), round(min(v * 2, 0.9), 4)} | {round(t + 0.01, 4) for t in thr} | {round(max(t - 0.01, 0.001), 4) for t in thr})
+                E += [{'type': 'set_card', 'wid': c['wid'], 'slot': 'status', 'key': k, 'new': x} for x in rng.sample(cands, min(2, len(cands))) if abs(x - v) > 0.0005]
+            elif k == 'family' and v is not None:
+                others = [x for x in pools.status_values.get('family', []) if x != v]
+                if others:
+                    E.append({'type': 'set_card', 'wid': c['wid'], 'slot': 'status', 'key': k, 'new': rng.choice(others)})
+    for e in E:
+        e['axis'] = axis_of(e)
+    return E
+
+
+def random_perm(letters, rng):
+    """A non-identity map old letter -> new letter."""
+    while True:
+        new = list(letters)
+        rng.shuffle(new)
+        if new != list(letters):
+            return dict(zip(letters, new))
+
+
+def permute_options(record, perm):
+    """A copy of the record whose option contents are moved by `perm` (old letter -> new letter); the letters A-D stay
+    in place, so the correct letter becomes perm[old answer]. The evidence is untouched."""
+    rec = copy.deepcopy(record)
+    rec['options'] = {perm[L]: text for L, text in record['options'].items()}
+    rec['options'] = {L: rec['options'][L] for L in record['options']}   # keep the A, B, C, D order
+    rec['answer'] = perm[record['answer']]
+    return rec
 
 
 E1_CSI = [20.0, 60.0, 90.0, 93.0, 97.0, 99.0]
@@ -521,6 +660,8 @@ def candidate_edits(st, pools, rng, split):
         E += [{'type': 'remove', 'wid': r['wid'], 'reason': 'the read failed quality control', 'reason_zh': '该序列读段未通过质控'} for r in rng.sample(st.rows, min(8, len(st.rows)))]
         for r in rng.sample(st.rows, min(4, len(st.rows))):
             E.append({'type': 'set_field', 'row': True, 'wid': r['wid'], 'field': 'query_coverage', 'new': rng.choice([v for v in COVERAGES if abs(v - r['query_coverage']) > 0.004])})
+        for e in E:
+            e['axis'] = axis_of(e)
         return E
     # --- cards
     if st.cards and fam not in ('C3-ImageTiming',) and fam[0] != 'A':
@@ -536,7 +677,9 @@ def candidate_edits(st, pools, rng, split):
         if fam != 'B4-PairedProfile':
             for c in rng.sample(cards, min(4, len(cards))):
                 if pool:
-                    E.append({'type': 'reassign', 'wid': c['wid'], 'name': rng.choice(pool)})
+                    E.append({'type': 'reassign', 'wid': c['wid'], 'name': rng.choice(pool), 'relation': 'random'})
+    for e in E:
+        e['axis'] = axis_of(e)
     return E
 
 
@@ -553,6 +696,29 @@ class Pools:
                     self.taxa[name] = t
         self.images, self.labels, self.by_family, self.by_split = images, labels, by_family, by_split
         self._cache = {}
+        self._fam = collections.defaultdict(list)
+        for name in sorted(self.taxa):
+            f = div.family_of(name)
+            if f:
+                self._fam[f].append(name)
+        # observed values of the status fields, for status edits
+        vals = collections.defaultdict(set)
+        for t in self.taxa.values():
+            for k, v in (t.get('status') or {}).items():
+                if k in STATUS_VALUE_KEYS and v is not None:
+                    vals[k].add(v)
+            f = div.family_of(t['scientific_name'])
+            if f:
+                vals['family'].add(f)
+        self.status_values = {k: sorted(v) for k, v in vals.items()}
+
+    def names_in_family(self, family):
+        return self._fam.get(family, [])
+
+    def pool_set(self, fam, params):
+        self.pool_for(fam, params, set())
+        key = (fam, params.get('target'), params.get('field'), params.get('threshold_pct'))
+        return set(self._cache[key])
 
     def pool_for(self, fam, params, present):
         key = (fam, params.get('target'), params.get('field'), params.get('threshold_pct'))

@@ -1,17 +1,20 @@
-"""LoRA fine-tuning of Qwen3.5 (image-text-to-text) on the witness protocol with the isolation loss.
+"""LoRA fine-tuning of Qwen3.5 (image-text-to-text) on the witness protocol with counterfactual equivariance.
 
-    torchrun --nproc_per_node=4 -m ecowitness.train --config configs/base.yaml --output_dir runs/base
+    torchrun --nproc_per_node=4 -m ecowitness.train --config configs/equivariance.yaml --output_dir runs/equivariance
 
 Loss = token cross-entropy on the assistant lines (answer, support, load_bearing, changed)
-     + lambda_iso * symmetric KL between the answer-letter distributions of a base question and its keep-uncited revision.
+     + lambda_iso  * symmetric KL between the answer-letter distributions of a base question and each companion whose
+                     edit leaves the answer unchanged (silent invariant edits, announced keep-uncited revisions), and,
+                     after permuting the base distribution, each option-permuted companion (equivariant)
+     + lambda_flip * hinge on companions whose edit must flip the answer: the old answer's log-probability under the
+                     edited evidence has to fall at least `flip_margin` below its value under the original evidence.
+The rules know the exact effect of every edit, so each term compares the model with a known transform of itself.
 """
 from __future__ import annotations
 
 import argparse
 import json
-import math
 import os
-import re
 from pathlib import Path
 
 import torch
@@ -20,16 +23,17 @@ import yaml
 from peft import LoraConfig, get_peft_model
 from transformers import AutoModelForImageTextToText, Trainer, TrainingArguments
 
-from .data import ALL_FIELDS, WitnessCollator, WitnessDataset, load_processor
+from .data import ALL_FIELDS, COMPANIONS, KIND, WitnessCollator, WitnessDataset, load_processor
 
 HERE = Path(__file__).resolve().parents[1]
 DEFAULTS = {
     'model': 'Qwen/Qwen3.5-9B', 'workspace': str(HERE.parent), 'data_dir': str(HERE / 'data'), 'langs': ['en'], 'splits': ['train'],
-    'modes': ['base', 'revise'], 'fields': list(ALL_FIELDS), 'pair': True, 'exclude_families': [], 'edit_classes': None, 'max_items': 0,
-    'lambda_iso': 0.5, 'lora_r': 32, 'lora_alpha': 64, 'lora_dropout': 0.05, 'lora_merger': False,
-    'epochs': 3, 'lr': 1e-4, 'warmup_ratio': 0.03, 'batch_size': 1, 'grad_accum': 8, 'max_length': 6144, 'bf16': True,
+    'modes': ['base', 'revise', 'silent'], 'fields': list(ALL_FIELDS), 'pair': True, 'exclude_families': [], 'edit_classes': None,
+    'silent_axes': None, 'companions': list(COMPANIONS), 'group_size': 3, 'group_budget': 8000, 'max_items': 0,
+    'lambda_iso': 0.5, 'lambda_flip': 0.5, 'flip_margin': 1.0, 'lora_r': 32, 'lora_alpha': 64, 'lora_dropout': 0.05, 'lora_merger': False,
+    'epochs': 2, 'lr': 1e-4, 'warmup_ratio': 0.03, 'batch_size': 1, 'grad_accum': 8, 'max_length': 6144, 'bf16': True,
     'gradient_checkpointing': True, 'attn': 'sdpa', 'logging_steps': 20, 'save_steps': 500, 'save_total_limit': 2,
-    'num_workers': 4, 'seed': 0, 'output_dir': str(HERE / 'runs/base'), 'report_to': 'none', 'resume': False,
+    'num_workers': 4, 'seed': 0, 'output_dir': str(HERE / 'runs/equivariance'), 'report_to': 'none', 'resume': False,
 }
 TARGET_RE = r'.*language_model.*\.(q_proj|k_proj|v_proj|o_proj|in_proj\w*|out_proj|gate_proj|up_proj|down_proj)'
 MERGER_RE = r'.*visual\.merger.*(linear_fc\d|proj)'
@@ -55,43 +59,66 @@ def parse():
     return cfg
 
 
+def sym_kl(a, b):
+    """Symmetric KL between two log-distributions."""
+    return 0.5 * ((a.exp() * (a - b)).sum() + (b.exp() * (b - a)).sum())
+
+
 class WitnessTrainer(Trainer):
-    def __init__(self, *args, lambda_iso=0.0, letter_ids=None, **kw):
+    def __init__(self, *args, lambda_iso=0.0, lambda_flip=0.0, flip_margin=1.0, letter_ids=None, **kw):
         super().__init__(*args, **kw)
         # The model accepts loss kwargs, so the Trainer would skip dividing the loss by gradient_accumulation_steps and
-        # expect num_items_in_batch to be used instead. compute_loss returns a per-batch mean (CE + iso KL), so let the
-        # Trainer do the division; otherwise gradients come out grad_accum times too large.
+        # expect num_items_in_batch to be used instead. compute_loss returns a per-batch mean, so let the Trainer do
+        # the division; otherwise gradients come out grad_accum times too large.
         self.model_accepts_loss_kwargs = False
-        self.lambda_iso = lambda_iso
+        self.lambda_iso, self.lambda_flip, self.flip_margin = lambda_iso, lambda_flip, flip_margin
         self.letter_ids = letter_ids
-        self._iso_log = []
+        self._logs = {'iso_kl': [], 'equiv_kl': [], 'flip_hinge': []}
 
     def compute_loss(self, model, inputs, return_outputs=False, num_items_in_batch=None):
-        answer_pos, group, role = inputs.pop('answer_pos'), inputs.pop('pair_group'), inputs.pop('pair_role')
+        answer_pos, group, kind = inputs.pop('answer_pos'), inputs.pop('cf_group'), inputs.pop('cf_kind')
+        perm, old = inputs.pop('cf_perm'), inputs.pop('cf_old')
         outputs = model(**inputs)
         loss = outputs.loss
-        if self.lambda_iso > 0 and (group >= 0).any():
+        if (self.lambda_iso > 0 or self.lambda_flip > 0) and (group >= 0).any():
             logits = outputs.logits
             idx = torch.arange(logits.shape[0], device=logits.device)
             sel = logits[idx, answer_pos - 1][:, self.letter_ids].float()  # logits that predict the answer token
             logp = F.log_softmax(sel, dim=-1)
-            kls = []
+            iso, equiv, flip = [], [], []
             for g in group[group >= 0].unique():
                 members = (group == g).nonzero().flatten()
-                if len(members) != 2:
+                base = [m for m in members.tolist() if kind[m] == KIND['base']]
+                if len(base) != 1:
                     continue
-                a, b = logp[members[0]], logp[members[1]]
-                kls.append(0.5 * ((a.exp() * (a - b)).sum() + (b.exp() * (b - a)).sum()))
-            if kls:
-                iso = torch.stack(kls).mean()
-                self._iso_log.append(float(iso.detach()))
-                loss = loss + self.lambda_iso * iso
+                b = logp[base[0]]
+                for m in members.tolist():
+                    k = int(kind[m])
+                    if k == KIND['invariant']:
+                        iso.append(sym_kl(b, logp[m]))
+                    elif k == KIND['equivariant']:
+                        equiv.append(sym_kl(b[perm[m]], logp[m]))
+                    elif k == KIND['flip'] and int(old[m]) >= 0:
+                        y = int(old[m])
+                        flip.append(F.relu(logp[m][y] - b[y].detach() + self.flip_margin))
+            if iso or equiv:
+                t = torch.stack(iso + equiv).mean()
+                loss = loss + self.lambda_iso * t
+                if iso:
+                    self._logs['iso_kl'].append(float(torch.stack(iso).mean().detach()))
+                if equiv:
+                    self._logs['equiv_kl'].append(float(torch.stack(equiv).mean().detach()))
+            if flip:
+                t = torch.stack(flip).mean()
+                loss = loss + self.lambda_flip * t
+                self._logs['flip_hinge'].append(float(t.detach()))
         return (loss, outputs) if return_outputs else loss
 
     def log(self, logs, *args, **kw):
-        if self._iso_log:
-            logs['iso_kl'] = sum(self._iso_log) / len(self._iso_log)
-            self._iso_log = []
+        for k, v in self._logs.items():
+            if v:
+                logs[k] = round(sum(v) / len(v), 4)
+                self._logs[k] = []
         super().log(logs, *args, **kw)
 
 
@@ -99,7 +126,8 @@ def main():
     cfg = parse()
     out = Path(cfg['output_dir'])
     out.mkdir(parents=True, exist_ok=True)
-    if int(os.environ.get('LOCAL_RANK', 0)) == 0:
+    rank0 = int(os.environ.get('LOCAL_RANK', 0)) == 0
+    if rank0:
         (out / 'config.json').write_text(json.dumps(cfg, indent=1), encoding='utf8')
     processor = load_processor(cfg['model'])
     model = AutoModelForImageTextToText.from_pretrained(cfg['model'], dtype=torch.bfloat16 if cfg['bf16'] else torch.float32, attn_implementation=cfg['attn'])
@@ -116,15 +144,16 @@ def main():
     if cfg['gradient_checkpointing']:
         model.gradient_checkpointing_enable(gradient_checkpointing_kwargs={'use_reentrant': False})
         model.enable_input_require_grads()
-    if int(os.environ.get('LOCAL_RANK', 0)) == 0:
+    if rank0:
         model.print_trainable_parameters()
         print(f'LoRA on {n_lora} modules')
     paths = [Path(cfg['data_dir']) / f'{s}.{l}.jsonl' for s in cfg['splits'] for l in cfg['langs']]
     ds = WitnessDataset(paths, modes=cfg['modes'], fields=cfg['fields'], pair=cfg['pair'], exclude_families=cfg['exclude_families'],
-                        edit_classes=cfg['edit_classes'], max_items=cfg['max_items'], seed=cfg['seed'])
+                        edit_classes=cfg['edit_classes'], silent_axes=cfg['silent_axes'], companions=cfg['companions'], group_size=cfg['group_size'],
+                        group_budget=cfg['group_budget'], max_items=cfg['max_items'], seed=cfg['seed'])
     collator = WitnessCollator(processor, cfg['workspace'], cfg['max_length'])
-    if int(os.environ.get('LOCAL_RANK', 0)) == 0:
-        print(f'{len(ds)} groups / {ds.n_records} records from {[str(p) for p in paths]}')
+    if rank0:
+        print(f'{len(ds)} groups / {ds.n_records} records / {ds.n_companions} grouped companions from {[str(p) for p in paths]}')
     args = TrainingArguments(
         output_dir=str(out), num_train_epochs=cfg['epochs'], learning_rate=cfg['lr'], warmup_steps=cfg['warmup_ratio'], lr_scheduler_type='cosine',  # transformers 5: a float warmup_steps < 1 is a ratio
         per_device_train_batch_size=cfg['batch_size'], gradient_accumulation_steps=cfg['grad_accum'], bf16=cfg['bf16'],
@@ -132,7 +161,8 @@ def main():
         dataloader_num_workers=cfg['num_workers'], remove_unused_columns=False, report_to=cfg['report_to'], seed=cfg['seed'],
         ddp_find_unused_parameters=False, gradient_checkpointing=False, label_names=['labels'], weight_decay=0.0, max_grad_norm=1.0,
     )
-    trainer = WitnessTrainer(model=model, args=args, train_dataset=ds, data_collator=collator, lambda_iso=cfg['lambda_iso'], letter_ids=collator.letter_ids)
+    trainer = WitnessTrainer(model=model, args=args, train_dataset=ds, data_collator=collator, lambda_iso=cfg['lambda_iso'],
+                             lambda_flip=cfg['lambda_flip'], flip_margin=cfg['flip_margin'], letter_ids=collator.letter_ids)
     trainer.train(resume_from_checkpoint=cfg['resume'] or None)
     trainer.save_model(str(out / 'adapter'))
     processor.save_pretrained(str(out / 'adapter'))
