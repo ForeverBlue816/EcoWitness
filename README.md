@@ -149,7 +149,7 @@ README）和 tar.gz。外部评测者回传 `predictions.jsonl`，在本目录�
 - 分组：Dataset 把一道 base 题和它的伴随记录放进同一组（`companions` 优先级：silent:invariant → silent:flip → silent:equivariant → revise:keep_uncited，
   `group_size` 默认 3），组的填充代价（成员数 × 最长成员的近似 token 数）超过 `group_budget`（8000）时伴随记录退为单独样本（只算交叉熵）。
 - 图像 256×256，Qwen3.5 下只占 64 个视觉 token；单条对话一般 1–2k token；v9 最长的训练对话约 4.8k token（两个样点名录对比的 D3 题），`max_length` 设为 6144。
-- 训练集：base 20,154 + revise 65,739 + silent（每题 2 条 + 一半的题 1 条置换）≈ 136k 条对话；`equivariance.yaml` 跑 2 轮，计算量与 `base.yaml` 的 3 × 86k 相当。
+- 训练集：base 20,154 + revise 65,739 + silent（每题 2 条 + 一半的题 1 条置换）= 136,237 条对话（silent 50,344）；`equivariance.yaml` 跑 2 轮，计算量与 `base.yaml` 的 3 × 86k 相当。
   4×A100 64 GB、每卡 1 组、梯度累积 8，作业时限 24 小时；先用 `TRAIN_EXTRA="--max_items 2000 --epochs 1"` 试跑量一下真实速度。
 - 消融：`equivariance_ce_only`（同样的数据，只有交叉熵）、`equivariance_generic`（去掉四个生态轴）、`base`（旧方法：只有 keep_uncited 隔离损失，无 silent）、
   `no_isolation`、`answer_only`、`base_questions_only`。

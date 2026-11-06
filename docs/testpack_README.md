@@ -53,10 +53,13 @@ E river network and connectivity, K species knowledge. `tier` is the difficulty 
 
 Sizes:
 
-| | base | revise | chain | chain steps | generations |
-|---|---|---|---|---|---|
-| test | 4,707 | 14,470 | 4,707 | 16,513 | 40,397 |
-| dev | 2,123 | 6,739 | 2,123 | 7,461 | 18,446 |
+| | base | silent | revise | chain | chain steps | generations |
+|---|---|---|---|---|---|---|
+| test | 4,707 | 18,758 | 14,470 | 4,707 | 16,513 | 59,155 |
+| dev | 2,123 | 8,407 | 6,739 | 2,123 | 7,461 | 26,853 |
+
+Per question the test set has about four silent records: two edited-evidence versions (one that should not change the
+answer, one that must), one with reordered options, and up to two with a witness removed.
 
 A conversation is usually 1–2k tokens of text (the longest about 5k) plus one or two images. Two tracks:
 
