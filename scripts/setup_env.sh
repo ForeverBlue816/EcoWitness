@@ -72,7 +72,14 @@ except ImportError:
 print('qwen3_5 supported')
 EOF
 
-# optional fused kernels for the Gated DeltaNet layers (need a CUDA toolchain; harmless if they fail)
-$PIP install --no-cache-dir --no-deps flash-linear-attention causal-conv1d 2>/dev/null || echo "NOTE: fused linear-attention kernels not installed; training uses the slower torch fallback"
+# Fused kernels for the Gated DeltaNet layers, installed one by one so a failed build does not take the others down.
+# flash-linear-attention is pure Python + triton (no compilation); --no-deps so it never touches torch.
+$PIP install --no-cache-dir --no-deps flash-linear-attention fla-core einops \
+  || echo "NOTE: flash-linear-attention not installed; chunk_gated_delta_rule uses the slow torch fallback"
+# causal-conv1d downloads a prebuilt wheel matching torch/CUDA/python when one exists, otherwise compiles with nvcc
+$PIP install --no-cache-dir --no-deps --no-build-isolation causal-conv1d \
+  || echo "NOTE: causal-conv1d not installed (needs a prebuilt wheel or nvcc); the torch fallback for the short convolution is used"
+python -c "import fla; print('flash-linear-attention', fla.__version__)" || true
+python -c "import causal_conv1d; print('causal-conv1d', causal_conv1d.__version__)" || true
 $PIP install --no-cache-dir nvitop || true
 echo "Environment ready. Activate with:  source $CODE_DIR/scripts/cineca_env.sh"
