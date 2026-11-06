@@ -76,10 +76,15 @@ EOF
 # flash-linear-attention is pure Python + triton (no compilation); --no-deps so it never touches torch.
 $PIP install --no-cache-dir --no-deps flash-linear-attention fla-core einops \
   || echo "NOTE: flash-linear-attention not installed; chunk_gated_delta_rule uses the slow torch fallback"
-# causal-conv1d downloads a prebuilt wheel matching torch/CUDA/python when one exists, otherwise compiles with nvcc
-$PIP install --no-cache-dir --no-deps --no-build-isolation causal-conv1d \
-  || echo "NOTE: causal-conv1d not installed (needs a prebuilt wheel or nvcc); the torch fallback for the short convolution is used"
-python -c "import fla; print('flash-linear-attention', fla.__version__)" || true
-python -c "import causal_conv1d; print('causal-conv1d', causal_conv1d.__version__)" || true
+# causal-conv1d: its prebuilt wheels need glibc >= 2.32; Leonardo (RHEL 8, glibc 2.28) cannot load them
+# ("GLIBC_2.32 not found"). Not installed by default: the short convolution's torch fallback is cheap next to the gated
+# delta rule. EW_CAUSAL_CONV1D=1 compiles it from source instead (needs nvcc; 10-20 min).
+$PIP uninstall -y causal-conv1d >/dev/null 2>&1 || true
+if [ "${EW_CAUSAL_CONV1D:-0}" = "1" ]; then
+  $PIP install --no-cache-dir --no-deps --no-build-isolation --no-binary causal-conv1d causal-conv1d \
+    || echo "NOTE: causal-conv1d failed to build; the torch fallback for the short convolution is used"
+fi
+# fla imports only on a machine with a GPU driver; on the login node just check that it is installed
+python -c "import importlib.metadata as m; print('flash-linear-attention', m.version('flash-linear-attention'))" || true
 $PIP install --no-cache-dir nvitop || true
 echo "Environment ready. Activate with:  source $CODE_DIR/scripts/cineca_env.sh"
