@@ -21,6 +21,15 @@ export TINY_DIR=${TINY_DIR:-$MODEL_ROOT/tiny-random-qwen3.5}
 export RUNS_DIR=${RUNS_DIR:-$SCRATCH_ROOT/runs}
 
 export HF_HOME=${HF_HOME:-$SCRATCH_ROOT/hf_cache}
+# Keep every compiler / package cache off $HOME (50 GB quota): triton and fla write compiled kernels and autotune
+# results to ~/.triton and ~/.cache by default, which fills the quota ("OSError: [Errno 122] Disk quota exceeded").
+export EW_CACHE=${EW_CACHE:-$SCRATCH_ROOT/cache}
+export XDG_CACHE_HOME=${XDG_CACHE_HOME:-$EW_CACHE/xdg}
+export TRITON_CACHE_DIR=${TRITON_CACHE_DIR:-$EW_CACHE/triton}
+export TORCHINDUCTOR_CACHE_DIR=${TORCHINDUCTOR_CACHE_DIR:-$EW_CACHE/torchinductor}
+export PIP_CACHE_DIR=${PIP_CACHE_DIR:-$EW_CACHE/pip}
+export CUDA_CACHE_PATH=${CUDA_CACHE_PATH:-$EW_CACHE/nv}
+mkdir -p "$XDG_CACHE_HOME" "$TRITON_CACHE_DIR" "$TORCHINDUCTOR_CACHE_DIR" "$PIP_CACHE_DIR" "$CUDA_CACHE_PATH" 2>/dev/null || true
 export TOKENIZERS_PARALLELISM=false
 export PYTHONUNBUFFERED=1
 
