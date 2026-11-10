@@ -32,6 +32,7 @@ ecowitness/
     build_revisions.py 生成 data/{split}.{lang}.jsonl（base / revise / chain / silent 四种记录）
     data.py            Dataset（base + 反事实伴随记录分组、token 预算）+ Collator（Qwen 模板、标签掩码、答案位置、置换索引）
     rl.py reward.py    校验器引导的强化学习（主方法）；回答的校验器奖励
+    plot_rl.py         从 rl_log.jsonl / val_log.jsonl 画训练曲线
     train.py           监督基线：LoRA 微调 + 等变损失（HF Trainer）
     runner.py score.py 生成循环与打分（含 silent 块：不变率、翻转率、置换等变率、归因忠实度）
     evaluate.py        本地模型评测
@@ -115,7 +116,8 @@ bash scripts/run_all.sh            # 主实验（configs/rl.yaml，强化学习�
 RUN=equivariance CONFIG=configs/equivariance.yaml bash scripts/run_all.sh   # 监督基线：反事实等变
 bash scripts/run_all.sh ablations  # configs/ 下每个配置各提交一对 train+eval
 RUN=base CONFIG=configs/base.yaml bash scripts/run_all.sh      # 旧方法基线：SFT + 隔离损失
-bash scripts/run_all.sh trial      # 试跑：调试队列，1 节点 4 卡，30 分钟，强化学习 100 步，看每步耗时、显存和奖励走势
+bash scripts/run_all.sh trial      # 试跑：调试队列，1 节点 4 卡，30 分钟，强化学习 50 步，看每步耗时、显存和奖励走势
+bash scripts/run_all.sh resume     # 强化学习到 23.3 小时自动停下后，从最新 checkpoint 接着训，训完自动评测
 RUN=rl_think CONFIG=configs/rl_think.yaml TRAIN_EXTRA="--init_adapter $RUNS_DIR/rl/adapter" sbatch scripts/train.slurm   # 带推理的强化学习，从 rl 的 adapter 接着训
 RUN=rl_think EVAL_EXTRA="--think --max_new_tokens 1040" sbatch scripts/eval.slurm                                         # 评测带推理的模型
 ```
@@ -162,18 +164,30 @@ README）和 tar.gz。外部评测者回传 `predictions.jsonl`，在本目录�
 ### 强化学习（`rl.py`）
 
 - 配置名以 `rl` 开头时 `train.slurm` 自动用 `ecowitness.rl`（accelerate 多卡），其余配置用 `ecowitness.train`。
-- 每步每卡：4 个回合 × 4 个采样回答（纯采样，温度 1，不做 top-k / top-p，保证反向时的对数概率就是采样分布的），按 `gen_token_budget` 分块生成；
-  反向只取 |优势| 最大、且（候选数 × 最长序列）不超过 `train_token_budget` 的候选，一次前向反向。
+- 每步每卡：8 个回合 × 4 个采样回答（纯采样，温度 1，不做 top-k / top-p，保证反向时的对数概率就是采样分布的），按 `gen_token_budget` 分块生成；
+  反向只取 |优势| 最大、且（候选数 × 最长序列）不超过 `train_token_budget` 的候选，一次前向反向。4 卡 × 8 回合 × 梯度累积 2 = 每次参数更新 64 个回合。
+- **显存由两个预算决定，不由回合数决定**：`gen_token_budget`（采样时一块里的提示 token 数）和 `train_token_budget`（反向时的 token 数）。
+  日志里的 `mem_sample_gb` / `mem_train_gb` 是 4 张卡里的峰值；A100 是 64 GB，峰值离上限还远就可以把对应预算调大。
 - 损失 = − Σ 优势 × 回答各 token 的平均对数概率 / 回合数。优势用同一回合采样回答的平均奖励做基线，不做方差归一化。
-- `episodes: 40000` 在 4 卡上是 2,500 步（每 2 步更新一次）。`max_hours: 11.3` 是时间预算：到点后所有进程在同一步停下并保存 adapter，
-  作业正常结束，后面的评测作业照常启动；`run_all.sh` 给 `rl*` 配置申请 12 小时（`EW_TRAIN_TIME` 可改）。
-  第一次试跑（2026-11-10，4×A100）约 31 秒一步，之后给每个回答加了长度上限，实际速度看日志里的 `sec_per_step` 和 `sample_sec`（采样占的秒数）。
 - 采样时每个回答最多生成 `reply_slack`（1.3）× 参考回答长度 + 16 个 token：一批回答要解码到最长的那个结束，一个跑飞的样本会拖慢整批。
-- 每 500 步存一次 adapter（`checkpoint-N`），日志在 `rl_log.jsonl`：
-  `reward`、`correct`、`parsed`、`load_bearing`、`informative_prompts`（有非零优势的回合比例）、`sec_per_step`、`sample_sec`。
 - 参考回答超过 `max_reply_tokens`（300）的记录不进强化学习（约 2%），因为采样上限内拿不到满分。
-- 续训或热启动：`--init_adapter <adapter 目录>`，配合 `--skip_steps N` 跳过已训练的步。
+- `episodes: 80000` 是 2,500 步。`max_hours: 23.3` 是时间预算：到点后所有进程在同一步停下，存 checkpoint 和 adapter，作业正常结束，
+  后面的评测作业照常启动。没跑完的用 `bash scripts/run_all.sh resume` 从最新 checkpoint 接着训（优化器、学习率进度、日志都接上）。
 - 消融：`rl_exact`（0/1 奖励，无部分分、无引用奖励）、`rl_think`（带推理）。`--gold_prob 0` 是不带示范的纯强化学习，`--modes base` 是只用原题。
+
+运行时和结束后在 `$RUNS_DIR/<run>/` 下：
+
+| 文件 | 内容 |
+|---|---|
+| 作业日志 `logs/train_<id>.out` | 进度条（步数、已用和剩余时间、奖励、准确率、验证准确率、每步秒数、显存），`tail -f` 实时看 |
+| `progress.json` | 当前步、百分比、已用小时、按当前速度的剩余小时、最新训练和验证指标；随时 `cat` |
+| `rl_log.jsonl` | 每 10 步一行，4 张卡合计的训练指标：`reward`、`correct`（总体、按记录类型、按题组）、`load_bearing`、`support`、`parsed`、`informative_prompts`、`sec_per_step`、`sample_sec`、`train_sec`、`mem_sample_gb`、`mem_train_gb`、`lr`、`loss` |
+| `val_log.jsonl` | 训练前、每 250 步、结束时，在固定的 240 条验证记录上贪心解码的指标。训练指标是温度 1 采样的回答，学习曲线要看这个 |
+| `checkpoint-N/` | 每 250 步和时间预算到点时：adapter + 优化器状态，保留最近 2 个 |
+| `adapter/` | 最终 adapter |
+| `curves.png`、`curves.pdf` | 训练结束自动画的 8 个小图。随时重画：`python -m ecowitness.plot_rl $RUNS_DIR/<run>`（需要 matplotlib） |
+
+第一次试跑（2026-11-10，4×A100，每卡 4 个回合，加回答长度上限之前）约 31 秒一步。
 
 ### 监督基线（`train.py`）
 

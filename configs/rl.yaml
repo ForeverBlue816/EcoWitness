@@ -3,9 +3,11 @@
 langs: [en]
 modes: [base, silent, revise]      # a question, a silently edited evidence state, an announced revision
 mode_weights: [0.4, 0.35, 0.25]
-episodes: 40000                    # 2,500 steps on 4 GPUs (4 prompts each); 0 = every record once
-max_hours: 11.3                    # stop and save the adapter after this long, whatever the step (12 h job)
-prompts_per_step: 4                # per GPU
+episodes: 80000                    # 2,500 steps on 4 GPUs (8 prompts each); 0 = every record once
+max_hours: 23.3                    # stop, checkpoint and save the adapter after this long (24 h job); continue with --resume true
+prompts_per_step: 8                # per GPU: 4 GPUs x 8 prompts x grad_accum 2 = 64 prompts per update
+eval_steps: 250                    # greedy validation on val_items records (also before the first step and at the end)
+val_items: 240
 samples_per_prompt: 4
 think: false                       # reply directly; reference replies are injected as demonstrations that fade out
 gold_prob: 0.5
@@ -18,4 +20,4 @@ lora_r: 32
 lora_alpha: 64
 lr: 5.0e-5
 grad_accum: 2
-save_steps: 500
+save_steps: 250

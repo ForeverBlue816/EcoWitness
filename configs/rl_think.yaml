@@ -5,7 +5,7 @@ langs: [en]
 modes: [base, silent, revise]
 mode_weights: [0.4, 0.35, 0.25]
 episodes: 24000
-max_hours: 11.3
+max_hours: 23.3
 prompts_per_step: 4
 samples_per_prompt: 4
 think: true

@@ -50,7 +50,7 @@ fi
 $PIP install --no-cache-dir "transformers>=5.3"
 # 3) peft and accelerate depend on torch: --no-deps so they never pull a second torch; their other deps are listed here
 $PIP install --no-cache-dir --no-deps "peft>=0.18" "accelerate>=1.5"
-$PIP install --no-cache-dir psutil pyyaml pillow openai
+$PIP install --no-cache-dir psutil pyyaml pillow openai tqdm matplotlib
 
 python - <<'EOF'
 import torch, transformers, peft, accelerate
