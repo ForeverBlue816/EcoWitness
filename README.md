@@ -1,16 +1,28 @@
-# EcoWitness：反事实等变训练与证据审核评测（Qwen3.5 + v10 河流生态基准）
+# EcoWitness：规则校验器引导的强化学习与证据审核评测（Qwen3.5 + v10 河流生态基准）
 
 把 v10 基准（v8 的出题规则 + 以实验室物种 × 样点 reads 总表为准的 DNA 证据，3,135 个有物种名录的样点，含 D6–D9 四个基于科和 reads 占比的多样性题族，共 31 个题族）的每道题改写成“证人协议”。
 数据只用英文（`--langs en`，配置里 `langs: [en]`）；中文版本仍可由生成器产出，但不再训练和发布：每条证据有编号（IMG、R1、SP-01、ROW-01…），模型回答时必须给出
 `answer / support / load_bearing` 三行；再由生成器对证据做反事实编辑，精确算出编辑后的真值。
 
-**方法：反事实等变（counterfactual equivariance）。** 规则知道每一次编辑对真值的精确作用，训练就要求模型的答案分布按同样的方式变换：
-真值不变的编辑 → 分布不变（对称 KL）；真值变成 y' 的编辑 → 原答案的概率必须下降（铰链）；选项置换 → 分布跟着置换（置换后的 KL）。
-编辑沿生物学轴采样：**taxonomy**（同科近缘种替换、性状相同的异科替换）、**trait**（功能性状）、**abundance**（reads 占比跨/不跨阈值）、
+**主方法：校验器引导的强化学习（`rl.py`，`configs/rl.yaml`）。** 规则引擎对任何证据状态都知道每个选项的取值、精确的 support 和 load_bearing 集合，
+所以每条记录都是一个可验证的回合：模型的任何回答都能被精确打分，不需要参考推理过程，也不需要把样本配对。每一步：
+
+1. 每张卡取 4 个回合（原题、静默编辑后的证据、带通知的修订，按 0.4 / 0.35 / 0.25 混合）；
+2. 对每个回合从当前策略采样 4 个回答；
+3. 用校验器给每个回答打分，优势 = 该回答的奖励 − 同一回合 4 个回答的平均奖励；
+4. 以 0.5 的概率把参考回答也作为一个候选，它的优势是 1 − 采样平均奖励：模型自己的回答越接近满分，这个示范的权重越小，自动退出；
+5. 合并相同的回答，只对 |优势| 最大的若干候选做一次反向传播。四个回答得分相同的回合优势为 0，不占反向计算，梯度预算自动集中在模型拿不准的题上。
+
+奖励按生态含义分级（`reward.py`，`rules.answer_rewards`）：答对得 1；差一个物种的计数、相邻的生境等级、部分重叠的物种集合、两项判断对一项，
+按接近程度给部分分（最多一半）；正确回答是 none 时任何选项都是 0。再加 load_bearing F1、support F1，修订题加 `changed` 行是否正确。
+`configs/rl_think.yaml` 打开模型的推理块：数据集没有参考推理过程，校验器奖励是推理的唯一监督，适合数物种这类一步答不准的题。
+
+**监督基线：反事实等变（`train.py`，`configs/equivariance.yaml`）。** 训练要求模型的答案分布按编辑对真值的作用变换：
+真值不变的编辑 → 分布不变（对称 KL）；真值变成 y' 的编辑 → 原答案的概率必须下降（铰链）；选项置换 → 分布跟着置换。需要把原题和编辑后的记录配成组。
+
+两种方法用同一份数据。编辑沿生物学轴采样：**taxonomy**（同科近缘种替换、性状相同的异科替换）、**trait**（功能性状）、**abundance**（reads 占比跨/不跨阈值）、
 **status**（受威胁等级、保护级别、原生/外来、检出频率、科），外加通用轴 witness（撤销/新增）、image、record、presentation（选项置换）。
-这些编辑以**静默**方式给模型：编辑后的证据作为一道新题提问，没有修订通知，模型必须自己从证据里读出变化。
-原来的隔离损失（base 与 keep_uncited 修订的对称 KL）是其中“不变编辑”的一个特例，仍然保留。
-评测新增归因忠实度：模型为原题声称的 `load_bearing`，与静默删除该证人后答案是否真的改变做对比。
+静默编辑是把编辑后的证据作为一道新题提问，没有修订通知。评测含归因忠实度：模型为原题声称的 `load_bearing`，与静默删除该证人后答案是否真的改变做对比。
 
 ```
 ecowitness/
@@ -19,11 +31,12 @@ ecowitness/
     rules.py           31 个题族的结论规则重算、留一法承重分析、反事实编辑（含生态轴编辑、选项置换）
     build_revisions.py 生成 data/{split}.{lang}.jsonl（base / revise / chain / silent 四种记录）
     data.py            Dataset（base + 反事实伴随记录分组、token 预算）+ Collator（Qwen 模板、标签掩码、答案位置、置换索引）
-    train.py           LoRA 微调 + 等变损失（HF Trainer）
+    rl.py reward.py    校验器引导的强化学习（主方法）；回答的校验器奖励
+    train.py           监督基线：LoRA 微调 + 等变损失（HF Trainer）
     runner.py score.py 生成循环与打分（含 silent 块：不变率、翻转率、置换等变率、归因忠实度）
     evaluate.py        本地模型评测
     evaluate_api.py    同一协议走 OpenAI 兼容 API（GPT / Gemini / Qwen-Max / DeepSeek 基线）
-  configs/             equivariance（主方法）equivariance_ce_only  equivariance_generic  base（旧方法：SFT + 隔离损失）no_isolation  answer_only  base_questions_only
+  configs/             rl（主方法）rl_think  rl_exact  |  equivariance  equivariance_ce_only  equivariance_generic  base  no_isolation  answer_only  base_questions_only（监督基线与消融）
   scripts/             setup_env.sh  download_model.sh  train.slurm  eval.slurm  run_all.sh  smoke_test.sh  pack_for_cluster.ps1
   data/                由 build_revisions 生成（本地生成后随包上传）
 ```
@@ -98,10 +111,13 @@ Qwen3.5 要点：架构 `Qwen3_5ForConditionalGeneration`（Gated DeltaNet + 注
 
 ```
 cd ~/ecowitness
-bash scripts/run_all.sh            # 主实验（configs/equivariance.yaml）：训练(4×A100, 24h 上限) -> 测试集评测，外加零样本基线评测
+bash scripts/run_all.sh            # 主实验（configs/rl.yaml，强化学习）：训练(4×A100, 24h 上限) -> 测试集评测，外加零样本基线评测
+RUN=equivariance CONFIG=configs/equivariance.yaml bash scripts/run_all.sh   # 监督基线：反事实等变
 bash scripts/run_all.sh ablations  # configs/ 下每个配置各提交一对 train+eval
 RUN=base CONFIG=configs/base.yaml bash scripts/run_all.sh      # 旧方法基线：SFT + 隔离损失
-TRAIN_EXTRA="--max_items 2000 --epochs 1" RUN=trial bash scripts/run_all.sh   # 先做一次小规模试跑
+TRAIN_EXTRA="--episodes 1600" RUN=trial sbatch scripts/train.slurm           # 强化学习小规模试跑（100 步），看每步耗时和奖励走势
+RUN=rl_think CONFIG=configs/rl_think.yaml TRAIN_EXTRA="--init_adapter $RUNS_DIR/rl/adapter" sbatch scripts/train.slurm   # 带推理的强化学习，从 rl 的 adapter 接着训
+RUN=rl_think EVAL_EXTRA="--think --max_new_tokens 1040" sbatch scripts/eval.slurm                                         # 评测带推理的模型
 ```
 其他变量：`EW_ACCOUNT`、`MODEL_DIR`、`DATA_DIR`、`RUNS_DIR`、`NGPU`、`EVAL_EXTRA`。
 作业脚本用 `python -m torch.distributed.run` 启动（不用 torchrun 可执行文件），让各进程继承 venv 的包。
@@ -142,6 +158,20 @@ python -m ecowitness.evaluate_api --model qwen3-vl-plus --split test --langs en 
 README）和 tar.gz。外部评测者回传 `predictions.jsonl`，在本目录用 `score.py` 对 `data/test.*.jsonl` 打分。
 
 ## 六、训练细节
+
+### 强化学习（`rl.py`）
+
+- 配置名以 `rl` 开头时 `train.slurm` 自动用 `ecowitness.rl`（accelerate 多卡），其余配置用 `ecowitness.train`。
+- 每步每卡：4 个回合 × 4 个采样回答（纯采样，温度 1，不做 top-k / top-p，保证反向时的对数概率就是采样分布的），按 `gen_token_budget` 分块生成；
+  反向只取 |优势| 最大、且（候选数 × 最长序列）不超过 `train_token_budget` 的候选，一次前向反向。
+- 损失 = − Σ 优势 × 回答各 token 的平均对数概率 / 回合数。优势用同一回合采样回答的平均奖励做基线，不做方差归一化。
+- `episodes: 80000` 在 4 卡上是 5,000 步（每 2 步更新一次）。每 500 步存一次 adapter（`checkpoint-N`），日志在 `rl_log.jsonl`：
+  `reward`、`correct`、`parsed`、`load_bearing`、`informative_prompts`（有非零优势的回合比例）、`sec_per_step`。
+- 参考回答超过 `max_reply_tokens`（300）的记录不进强化学习（约 2%），因为采样上限内拿不到满分。
+- 续训或热启动：`--init_adapter <adapter 目录>`，配合 `--skip_steps N` 跳过已训练的步。
+- 消融：`rl_exact`（0/1 奖励，无部分分、无引用奖励）、`rl_think`（带推理）。`--gold_prob 0` 是不带示范的纯强化学习，`--modes base` 是只用原题。
+
+### 监督基线（`train.py`）
 
 - 底座冻结，LoRA（r=32）挂在语言模型全部投影层（q/k/v/o、Gated DeltaNet 的 in_proj*/out_proj、MLP）；`--lora_merger true` 可把视觉融合层也挂上。
 - 损失 = 助手行的交叉熵 + `lambda_iso` × 对称 KL（base 与每条不变伴随记录：silent invariant、keep_uncited 修订；置换伴随记录则先把 base 的分布按 `perm` 重排再比）

@@ -1,0 +1,20 @@
+# Variant: RL with the model's reasoning block open. The verifier reward is the only supervision of the reasoning
+# (there are no reference reasoning traces). Sampling is several times slower, so fewer episodes.
+# Start from the adapter of configs/rl.yaml:  TRAIN_EXTRA="--init_adapter $RUNS_DIR/rl/adapter"
+langs: [en]
+modes: [base, silent, revise]
+mode_weights: [0.4, 0.35, 0.25]
+episodes: 24000
+prompts_per_step: 4
+samples_per_prompt: 4
+think: true
+gold_prob: 0.0                     # a reference reply has no reasoning; injecting it would teach the model to skip reasoning
+max_new_tokens: 640                # reasoning + reply; a reply that does not finish earns the format penalty
+max_reply_tokens: 200
+gen_token_budget: 24000
+train_token_budget: 8000
+lora_r: 32
+lora_alpha: 64
+lr: 3.0e-5
+grad_accum: 2
+save_steps: 250

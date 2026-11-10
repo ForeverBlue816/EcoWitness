@@ -20,7 +20,7 @@ HERE = Path(__file__).resolve().parents[1]
 
 
 class Generator:
-    def __init__(self, model_path, adapter, workspace, max_new_tokens=64, batch_size=8, dtype=torch.bfloat16, device='cuda'):
+    def __init__(self, model_path, adapter, workspace, max_new_tokens=640, batch_size=8, dtype=torch.bfloat16, device='cuda', think=False):
         self.processor = load_processor(adapter or model_path)
         self.model = AutoModelForImageTextToText.from_pretrained(model_path, dtype=dtype, attn_implementation='sdpa')
         if adapter:
@@ -29,8 +29,8 @@ class Generator:
             self.model = self.model.merge_and_unload()
         self.model.to(device).eval()
         self.device = device
-        self.coll = WitnessCollator(self.processor, workspace)
-        self.max_new_tokens, self.batch_size = max_new_tokens, batch_size
+        self.coll = WitnessCollator(self.processor, workspace, think=think)
+        self.max_new_tokens, self.batch_size, self.think = max_new_tokens, batch_size, think
 
     @torch.no_grad()
     def generate(self, message_lists):
@@ -46,7 +46,11 @@ class Generator:
             batch = self.processor(text=prompts, images=images or None, padding=True, return_tensors='pt').to(self.device)
             gen = self.model.generate(**batch, max_new_tokens=self.max_new_tokens, do_sample=False, pad_token_id=self.processor.tokenizer.pad_token_id)
             new = gen[:, batch['input_ids'].shape[1]:]
-            outs.extend(self.processor.batch_decode(new, skip_special_tokens=True))
+            if self.think:   # keep </think> so the scorer can drop the reasoning; strip the end and padding tokens by hand
+                texts = self.processor.batch_decode(new, skip_special_tokens=False)
+                outs.extend(t.replace('<|im_end|>', '').replace('<|endoftext|>', '') for t in texts)
+            else:
+                outs.extend(self.processor.batch_decode(new, skip_special_tokens=True))
         return outs
 
 
@@ -62,7 +66,8 @@ def main():
     ap.add_argument('--families', nargs='*', default=None)
     ap.add_argument('--max_items', type=int, default=0, help='per mode and language (0 = all)')
     ap.add_argument('--batch_size', type=int, default=8)
-    ap.add_argument('--max_new_tokens', type=int, default=64)
+    ap.add_argument('--max_new_tokens', type=int, default=640, help='citation lists can be long: 2 % of reference replies exceed 256 tokens, the longest is about 800')
+    ap.add_argument('--think', action='store_true', help='leave the reasoning block open (for adapters trained with configs/rl_think.yaml); add about 400 to --max_new_tokens')
     ap.add_argument('--teacher_forced', action='store_true', help='chains: feed gold previous answers (needs targets, owner only)')
     ap.add_argument('--own_history', action='store_true', help='revisions: feed the model\'s own base answer as its prior reply (base mode must run too)')
     ap.add_argument('--device', default='cuda')
@@ -70,9 +75,9 @@ def main():
     ap.add_argument('--out', required=True)
     a = ap.parse_args()
     dtype = {'bf16': torch.bfloat16, 'fp16': torch.float16, 'fp32': torch.float32}[a.dtype]
-    gen = Generator(a.model, a.adapter, a.workspace, a.max_new_tokens, a.batch_size, dtype, a.device)
+    gen = Generator(a.model, a.adapter, a.workspace, a.max_new_tokens, a.batch_size, dtype, a.device, think=a.think)
     runner.run(gen, a.data_dir, a.split, a.langs, a.modes, a.out, families=a.families, max_items=a.max_items,
-               teacher_forced=a.teacher_forced, own_history=a.own_history, meta={'model': a.model, 'adapter': a.adapter})
+               teacher_forced=a.teacher_forced, own_history=a.own_history, meta={'model': a.model, 'adapter': a.adapter, 'think': a.think, 'max_new_tokens': a.max_new_tokens})
 
 
 if __name__ == '__main__':

@@ -10,6 +10,7 @@ Record modes: base, revise, chain (unchanged from v1 of the data; same seeds, by
 A silent record carries `axis`, `effect` (invariant / flip / equivariant), `edit_class`, `base_answer` and, for a
 permutation, `perm` (old letter -> new letter). Val/test also get removal probes (one load-bearing and one other
 witness removed) for the attribution-faithfulness metric.
+base / revise / silent records carry `answer_reward`: letter -> graded reward in [0, 1] (rules.answer_rewards), used by rl.py.
 """
 from __future__ import annotations
 
@@ -179,7 +180,8 @@ def silent_records(r, recs, p, lab, states, base, langs, pools, split, args, sta
             msgs = [{'role': 'system', 'content': protocol.SYSTEM[lang]}, protocol.user_message(ns[lang], recs[lang], lang)]
             out[lang].append({'id': f'{r["qa_id"]}|{lang}|s{k}', 'mode': 'silent', 'lang': lang, **meta, 'messages': msgs,
                               'target': protocol.render_target(truth, False), 'truth': truth, 'pair_id': r['qa_id'], 'edit_class': cls,
-                              'edit': public_edit(e), 'axis': e['axis'], 'effect': effect, 'base_answer': base[lang]['answer'], 'probe': bool(e.get('probe'))})
+                              'edit': public_edit(e), 'axis': e['axis'], 'effect': effect, 'base_answer': base[lang]['answer'], 'probe': bool(e.get('probe')),
+                              'answer_reward': rules.answer_rewards(ns[lang], ana[lang]['value'])})
         stats[split]['silent_axis'][e['axis']] += 1
         stats[split]['silent_effect'][effect] += 1
         if e.get('relation'):
@@ -198,7 +200,7 @@ def silent_records(r, recs, p, lab, states, base, langs, pools, split, args, sta
             out[lang].append({'id': f'{r["qa_id"]}|{lang}|s{k}', 'mode': 'silent', 'lang': lang, **meta, 'messages': msgs,
                               'target': protocol.render_target(truth, False), 'truth': truth, 'pair_id': r['qa_id'], 'edit_class': 'permute',
                               'edit': {'type': 'permute'}, 'axis': 'presentation', 'effect': 'equivariant', 'base_answer': base[lang]['answer'],
-                              'perm': {**perm, 'none': 'none'}, 'probe': False})
+                              'perm': {**perm, 'none': 'none'}, 'probe': False, 'answer_reward': rules.answer_rewards(st, ana['value'])})
         stats[split]['silent_axis']['presentation'] += 1
         stats[split]['silent_effect']['equivariant'] += 1
     return out
@@ -234,7 +236,8 @@ def build_split(split, langs, records, evidence, pools, args, stats):
             msgs = [{'role': 'system', 'content': protocol.SYSTEM[lang]}, protocol.user_message(states[lang], recs[lang], lang)]
             truth = {k: base[lang][k] for k in ('answer', 'support', 'load_bearing')}
             out[lang].append({'id': f'{r["qa_id"]}|{lang}|base', 'mode': 'base', 'lang': lang, **meta, 'messages': msgs,
-                              'target': protocol.render_target(truth, False), 'truth': truth, 'pair_id': pair_id, 'edit_class': None, 'edit': None})
+                              'target': protocol.render_target(truth, False), 'truth': truth, 'pair_id': pair_id, 'edit_class': None, 'edit': None,
+                              'answer_reward': rules.answer_rewards(states[lang], base[lang]['value'])})
         stats[split]['base'][fam] += 1
         # ---- single-step revisions
         cands = []
@@ -260,7 +263,8 @@ def build_split(split, langs, records, evidence, pools, args, stats):
                 msgs = [{'role': 'system', 'content': protocol.SYSTEM[lang]}, protocol.user_message(states[lang], recs[lang], lang),
                         {'role': 'assistant', 'content': protocol.render_target(base[lang], False)}, protocol.revision_message(e, lang)]
                 out[lang].append({'id': f'{r["qa_id"]}|{lang}|e{k}', 'mode': 'revise', 'lang': lang, **meta, 'messages': msgs,
-                                  'target': protocol.render_target(truth, True), 'truth': truth, 'pair_id': pair_id, 'edit_class': cls, 'edit': public_edit(e)})
+                                  'target': protocol.render_target(truth, True), 'truth': truth, 'pair_id': pair_id, 'edit_class': cls, 'edit': public_edit(e),
+                                  'answer_reward': rules.answer_rewards(states[lang], ana[lang]['value'])})
             stats[split]['revise'][cls] += 1
             stats[split]['revise_by_family'][fam] += 1
             stats[split]['edit_types'][e['type']] += 1

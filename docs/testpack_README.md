@@ -79,7 +79,7 @@ python -m ecowitness.evaluate_api --model <model> --data_dir . --workspace . \
 ```
 
 - Images are sent as base64 PNG. Temperature defaults to 0.
-- Thinking models: either `--no_thinking` (vLLM / DashScope honour it) or raise `--max_tokens` to 2048 or more, otherwise
+- Thinking models: either `--no_thinking` (vLLM / DashScope honour it) or raise `--max_tokens` to 4096 or more, otherwise
   the reasoning uses up the budget before the answer. Anything before `</think>` is ignored when scoring.
 - Replies are cached per conversation in `runs/<model>/cache.jsonl`; an interrupted run resumes.
 
@@ -90,7 +90,9 @@ pip install -r requirements_local.txt
 python -m ecowitness.evaluate --model <path> --data_dir . --workspace . \
     --split test --langs en --modes base silent revise chain --batch_size 8 --out runs/<model>
 ```
-Greedy decoding; `--max_new_tokens 64` is enough (the reply is three or four lines). Add `--adapter <path>` for a LoRA.
+Greedy decoding. Keep the default `--max_new_tokens 640`: the reply is three or four lines, but the citation lists can be long (a quarter of the
+reference replies exceed 64 tokens, 2 % exceed 256, the longest is about 800). A reply cut off before its `load_bearing` line loses its citation
+score. Add `--adapter <path>` for a LoRA.
 
 ### C. Your own inference stack
 

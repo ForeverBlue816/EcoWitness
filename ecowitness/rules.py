@@ -141,6 +141,48 @@ def letter_of(state, value):
     return 'none'
 
 
+# ----------------------------------------------------------------------------- graded answer reward
+# How good each option is, not only which one is right: the reward of the verifier-guided RL trainer (rl.py).
+ORDINAL_INT = COUNT_FAMILIES | {'A3-ChannelWidth', 'A4-WaterFraction', 'A5-Sinuosity', 'A6-RiparianVegetation', 'A7-BuiltUpBank'}
+ORDERED = {'D9-DominanceClass': ['single_dominant', 'skewed', 'moderate', 'even']}
+
+
+def closeness(fam, v, t):
+    """Similarity in [0, 1] of an option value v to the true value t; 1 only when they are equal."""
+    if v == t:
+        return 1.0
+    if v is None or t is None:
+        return 0.0
+    if isinstance(t, frozenset) and isinstance(v, frozenset):       # sets of list numbers: Jaccard overlap
+        return len(v & t) / len(v | t) if (v | t) else 1.0
+    if isinstance(t, tuple) and isinstance(v, tuple) and len(v) == len(t):
+        if t and all(isinstance(x, tuple) for x in t + v):          # B4: a set of (trait, trait) profiles
+            a, b = set(v), set(t)
+            return len(a & b) / len(a | b)
+        parts = []                                                  # C1 (scene, count), C2 / E1 / D3 (two verdicts)
+        for x, y in zip(v, t):
+            if isinstance(x, int) and isinstance(y, int) and not isinstance(x, bool) and not isinstance(y, bool):
+                parts.append(max(0.0, 1 - abs(x - y) / 3))
+            else:
+                parts.append(float(x == y))
+        return sum(parts) / len(parts)
+    if isinstance(t, int) and isinstance(v, int) and not isinstance(t, bool):
+        # counts and ordered image classes: one species / one bin off is better than three off. List numbers (B3) are names, not quantities.
+        return max(0.0, 1 - abs(v - t) / 3) if fam in ORDINAL_INT or fam == 'B5-GatedTrace' else 0.0
+    if fam in ORDERED and v in ORDERED[fam] and t in ORDERED[fam]:
+        return max(0.0, 1 - abs(ORDERED[fam].index(v) - ORDERED[fam].index(t)) / 3)
+    return 0.0
+
+
+def answer_rewards(st, value):
+    """letter -> reward in [0, 1] for answering that letter when the true value is `value`. The correct letter gets 1.
+    When no option fits (the answer is none) every option gets 0: abstaining is the only good answer."""
+    truth = letter_of(st, value)
+    out = {L: (round(closeness(st.family, v, value), 3) if truth != 'none' else 0.0) for L, v in st.option_values.items()}
+    out['none'] = 1.0 if truth == 'none' else 0.0
+    return out
+
+
 def build_state(record, private, lang, image_label=None):
     """record: a v8 row (en or zh); private: its reports/answer_evidence.jsonl row; image_label: category of the image
     for the visual family (A*, C1) or None."""

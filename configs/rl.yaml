@@ -1,0 +1,20 @@
+# Main method: verifier-guided reinforcement learning (ecowitness/rl.py).
+# Episodes are single conversations scored by the rule engine; nothing is paired and no counterfactual loss is used.
+langs: [en]
+modes: [base, silent, revise]      # a question, a silently edited evidence state, an announced revision
+mode_weights: [0.4, 0.35, 0.25]
+episodes: 80000                    # 5,000 steps on 4 GPUs (4 prompts each); 0 = every record once
+prompts_per_step: 4                # per GPU
+samples_per_prompt: 4
+think: false                       # reply directly; reference replies are injected as demonstrations that fade out
+gold_prob: 0.5
+gold_coef: 1.0
+max_new_tokens: 320                # 99 % of reference replies fit; longer ones are left out of training
+max_reply_tokens: 300
+gen_token_budget: 32000            # prompt tokens per sampling chunk
+train_token_budget: 8000           # prompt + reply tokens of the candidates in the gradient step
+lora_r: 32
+lora_alpha: 64
+lr: 5.0e-5
+grad_accum: 2
+save_steps: 500

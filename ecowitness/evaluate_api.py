@@ -21,7 +21,7 @@ HERE = Path(__file__).resolve().parents[1]
 
 
 class ApiGenerator:
-    def __init__(self, model, workspace, cache_path, temperature=0.0, max_tokens=256, extra_body=None, sleep=0.0, workers=1):
+    def __init__(self, model, workspace, cache_path, temperature=0.0, max_tokens=1024, extra_body=None, sleep=0.0, workers=1):
         from openai import OpenAI
         self.client = OpenAI()
         self.model, self.workspace = model, Path(workspace)
@@ -89,7 +89,7 @@ def main():
     ap.add_argument('--own_history', action='store_true', help='revisions: the model\'s own base answer as its prior reply')
     ap.add_argument('--no_thinking', action='store_true', help='send chat_template_kwargs.enable_thinking=false (vLLM / DashScope)')
     ap.add_argument('--temperature', type=float, default=0.0)
-    ap.add_argument('--max_tokens', type=int, default=256, help='raise for thinking models whose reasoning counts against the limit')
+    ap.add_argument('--max_tokens', type=int, default=1024, help='long citation lists need up to about 800 tokens; raise further for thinking models whose reasoning counts against the limit')
     ap.add_argument('--workers', type=int, default=4, help='parallel requests')
     ap.add_argument('--out', required=True)
     a = ap.parse_args()

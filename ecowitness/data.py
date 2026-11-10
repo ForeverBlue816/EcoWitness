@@ -138,8 +138,9 @@ class WitnessDataset(Dataset):
 
 
 class WitnessCollator:
-    def __init__(self, processor, workspace, max_length=4096):
+    def __init__(self, processor, workspace, max_length=4096, think=False):
         self.processor = processor
+        self.think = think   # True: leave the model's reasoning block open (RL with reasoning, or evaluating such a model)
         self.tok = processor.tokenizer
         self.workspace = Path(workspace)
         self.max_length = max_length
@@ -148,7 +149,7 @@ class WitnessCollator:
 
     def render(self, rec):
         chat, paths = protocol.to_chat(rec['messages'])
-        prompt = self.processor.apply_chat_template(chat, tokenize=False, add_generation_prompt=True, enable_thinking=False)
+        prompt = self.processor.apply_chat_template(chat, tokenize=False, add_generation_prompt=True, enable_thinking=self.think)
         return prompt, paths
 
     def load_images(self, paths):
