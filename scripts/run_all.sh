@@ -20,7 +20,9 @@ mkdir -p logs "$RUNS_DIR"
 
 submit_pair () {   # $1=run name  $2=config
   local run=$1 cfg=$2 tid eid
-  tid=$(RUN=$run CONFIG=$cfg sbatch -A "$EW_ACCOUNT" -p "$EW_PARTITION" --parsable scripts/train.slurm)
+  local limit=24:00:00
+  case "$(basename "$cfg")" in rl*) limit=12:00:00 ;; esac   # RL runs stop by themselves after max_hours (configs/rl*.yaml)
+  tid=$(RUN=$run CONFIG=$cfg sbatch -A "$EW_ACCOUNT" -p "$EW_PARTITION" --parsable --time="${EW_TRAIN_TIME:-$limit}" scripts/train.slurm)
   echo "train  $run  job $tid  ($cfg)"
   eid=$(RUN=$run sbatch -A "$EW_ACCOUNT" -p "$EW_PARTITION" --parsable --dependency=afterok:$tid scripts/eval.slurm)
   echo "eval   $run  job $eid  (after $tid)"

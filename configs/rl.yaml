@@ -3,7 +3,8 @@
 langs: [en]
 modes: [base, silent, revise]      # a question, a silently edited evidence state, an announced revision
 mode_weights: [0.4, 0.35, 0.25]
-episodes: 80000                    # 5,000 steps on 4 GPUs (4 prompts each); 0 = every record once
+episodes: 40000                    # 2,500 steps on 4 GPUs (4 prompts each); 0 = every record once
+max_hours: 11.3                    # stop and save the adapter after this long, whatever the step (12 h job)
 prompts_per_step: 4                # per GPU
 samples_per_prompt: 4
 think: false                       # reply directly; reference replies are injected as demonstrations that fade out

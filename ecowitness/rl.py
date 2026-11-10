@@ -38,7 +38,7 @@ import yaml
 from accelerate import Accelerator
 from peft import LoraConfig, PeftModel, get_peft_model
 from torch.utils.data import DataLoader, Dataset
-from transformers import AutoModelForImageTextToText
+from transformers import AutoModelForImageTextToText, StoppingCriteria, StoppingCriteriaList
 
 from .data import WitnessCollator, approx_tokens, load_processor
 from .reward import PARTIAL, WEIGHTS, reward
@@ -55,6 +55,7 @@ DEFAULTS = {
     'lora_r': 32, 'lora_alpha': 64, 'lora_dropout': 0.0, 'lora_merger': False, 'init_adapter': '',
     'lr': 5e-5, 'warmup_ratio': 0.03, 'grad_accum': 2, 'max_grad_norm': 1.0, 'bf16': True, 'gradient_checkpointing': True, 'attn': 'sdpa',
     'logging_steps': 10, 'save_steps': 500, 'save_total_limit': 2, 'seed': 0, 'output_dir': str(HERE / 'runs/rl'), 'skip_steps': 0,
+    'reply_slack': 1.3, 'max_hours': 0.0,
 }
 
 
@@ -118,6 +119,17 @@ class Episodes(Dataset):
         return self.batches[i]
 
 
+class RowLimit(StoppingCriteria):
+    """Stops each row of a batch at its own number of new tokens. The decoding loop runs as long as its longest row, so
+    one runaway sample would otherwise cost every row of the chunk `max_new_tokens` decoding steps."""
+
+    def __init__(self, prompt_len, limits):
+        self.prompt_len, self.limits = prompt_len, limits
+
+    def __call__(self, input_ids, scores, **kwargs):
+        return (input_ids.shape[1] - self.prompt_len) >= self.limits
+
+
 class Policy:
     """Sampling and scoring around one LoRA model. `model` may be DDP-wrapped; `core` is the unwrapped PeftModel."""
 
@@ -145,9 +157,10 @@ class Policy:
         return out
 
     @torch.no_grad()
-    def sample(self, prompts, images, k):
-        """k sampled replies per prompt -> list (per prompt) of lists of token-id lists."""
+    def sample(self, prompts, images, k, limits=None):
+        """k sampled replies per prompt -> list (per prompt) of lists of token-id lists. `limits`: new-token cap per prompt."""
         cfg = self.cfg
+        limits = limits or [cfg['max_new_tokens']] * len(prompts)
         order = [i for i in range(len(prompts)) for _ in range(k)]
         longest = max(approx_tokens_text(p) for p in prompts)
         chunk = max(1, cfg['gen_token_budget'] // max(longest, 1))
@@ -156,11 +169,13 @@ class Policy:
         for s in range(0, len(order), chunk):
             idx = order[s:s + chunk]
             batch = self.encode([prompts[i] for i in idx], [images[i] for i in idx], 'left').to(self.device)
-            gen = self.core.generate(**batch, max_new_tokens=cfg['max_new_tokens'], do_sample=True, temperature=cfg['temperature'], top_p=cfg['top_p'],
-                                     top_k=0, repetition_penalty=1.0, pad_token_id=self.pad, use_cache=True)   # plain sampling: the log-probabilities of step 5 are those of the sampler
-            new = gen[:, batch['input_ids'].shape[1]:].tolist()
+            width = batch['input_ids'].shape[1]
+            stop = StoppingCriteriaList([RowLimit(width, torch.tensor([limits[i] for i in idx], device=self.device))])
+            gen = self.core.generate(**batch, max_new_tokens=max(limits[i] for i in idx), do_sample=True, temperature=cfg['temperature'], top_p=cfg['top_p'],
+                                     top_k=0, repetition_penalty=1.0, pad_token_id=self.pad, use_cache=True, stopping_criteria=stop)   # plain sampling: the log-probabilities of step 5 are those of the sampler
+            new = gen[:, width:].tolist()
             for i, row in zip(idx, new):
-                out[i].append(self.trim(row))
+                out[i].append(self.trim(row[:limits[i]]))
         self.core.train()
         return out
 
@@ -218,7 +233,11 @@ class Policy:
         rendered = [self.coll.render(r) for r in records]
         prompts = [p for p, _ in rendered]
         images = [self.coll.load_images(paths) for _, paths in rendered]
-        samples = self.sample(prompts, images, cfg['samples_per_prompt'])
+        # a reply may be `reply_slack` times as long as the reference reply (plus a little); reasoning has no reference length
+        limits = None if cfg['think'] else [min(cfg['max_new_tokens'], int(cfg['reply_slack'] * len(self.tok.encode(r['target'], add_special_tokens=False))) + 16) for r in records]
+        t_gen = time.time()
+        samples = self.sample(prompts, images, cfg['samples_per_prompt'], limits)
+        t_gen = time.time() - t_gen
         cands, stats = [], {'reward': [], 'parsed': [], 'correct': [], 'answer': [], 'load_bearing': [], 'support': [], 'informative': 0, 'distinct': [], 'new_tokens': []}
         for i, r in enumerate(records):
             scored = [reward(r, self.text(ids), self.weights, cfg['partial_credit']) for ids in samples[i]]
@@ -252,7 +271,8 @@ class Policy:
             chosen = [(0.0, 0, self.tok.encode(records[0]['target'] + '<|im_end|>', add_special_tokens=False), 0.0)]
         loss = self.loss([prompts[c[1]] for c in chosen], [images[c[1]] for c in chosen], [c[2] for c in chosen], [c[3] for c in chosen], len(records))
         out = {k: sum(v) / max(len(v), 1) for k, v in stats.items() if isinstance(v, list)}
-        out.update({'informative_prompts': stats['informative'] / len(records), 'candidates_trained': len(chosen), 'abs_advantage': sum(c[0] for c in chosen) / max(len(chosen), 1)})
+        out.update({'informative_prompts': stats['informative'] / len(records), 'candidates_trained': len(chosen), 'abs_advantage': sum(c[0] for c in chosen) / max(len(chosen), 1),
+                    'sample_sec': t_gen})
         return loss, out
 
 
@@ -310,6 +330,7 @@ def main():
         processor.save_pretrained(str(d))
         return d
 
+    started = time.time()
     for step, records in enumerate(loader, 1):
         if step <= cfg['skip_steps']:
             continue
@@ -323,6 +344,13 @@ def main():
                 sched.step()
             optim.zero_grad()
         log.append({**stats, 'loss': float(loss.detach())})
+        if cfg['max_hours'] > 0 and step % 10 == 0:
+            # every process takes the same decision at the same step: a process that stopped alone would hang the others
+            over = torch.tensor([float(time.time() - started > cfg['max_hours'] * 3600)], device=accelerator.device)
+            if accelerator.gather(over).max().item() > 0:
+                if main_proc:
+                    print(f'time budget of {cfg["max_hours"]} h reached at step {step} of {steps}: stopping and saving', flush=True)
+                break
         if main_proc and step % cfg['logging_steps'] == 0:
             avg = {k: round(sum(x[k] for x in log) / len(log), 4) for k in log[0]}
             line = {'step': step, 'of': steps, 'sec_per_step': round((time.time() - t0) / len(log), 2), 'lr': sched.get_last_lr()[0], **avg}

@@ -165,8 +165,12 @@ README）和 tar.gz。外部评测者回传 `predictions.jsonl`，在本目录�
 - 每步每卡：4 个回合 × 4 个采样回答（纯采样，温度 1，不做 top-k / top-p，保证反向时的对数概率就是采样分布的），按 `gen_token_budget` 分块生成；
   反向只取 |优势| 最大、且（候选数 × 最长序列）不超过 `train_token_budget` 的候选，一次前向反向。
 - 损失 = − Σ 优势 × 回答各 token 的平均对数概率 / 回合数。优势用同一回合采样回答的平均奖励做基线，不做方差归一化。
-- `episodes: 80000` 在 4 卡上是 5,000 步（每 2 步更新一次）。每 500 步存一次 adapter（`checkpoint-N`），日志在 `rl_log.jsonl`：
-  `reward`、`correct`、`parsed`、`load_bearing`、`informative_prompts`（有非零优势的回合比例）、`sec_per_step`。
+- `episodes: 40000` 在 4 卡上是 2,500 步（每 2 步更新一次）。`max_hours: 11.3` 是时间预算：到点后所有进程在同一步停下并保存 adapter，
+  作业正常结束，后面的评测作业照常启动；`run_all.sh` 给 `rl*` 配置申请 12 小时（`EW_TRAIN_TIME` 可改）。
+  第一次试跑（2026-11-10，4×A100）约 31 秒一步，之后给每个回答加了长度上限，实际速度看日志里的 `sec_per_step` 和 `sample_sec`（采样占的秒数）。
+- 采样时每个回答最多生成 `reply_slack`（1.3）× 参考回答长度 + 16 个 token：一批回答要解码到最长的那个结束，一个跑飞的样本会拖慢整批。
+- 每 500 步存一次 adapter（`checkpoint-N`），日志在 `rl_log.jsonl`：
+  `reward`、`correct`、`parsed`、`load_bearing`、`informative_prompts`（有非零优势的回合比例）、`sec_per_step`、`sample_sec`。
 - 参考回答超过 `max_reply_tokens`（300）的记录不进强化学习（约 2%），因为采样上限内拿不到满分。
 - 续训或热启动：`--init_adapter <adapter 目录>`，配合 `--skip_steps N` 跳过已训练的步。
 - 消融：`rl_exact`（0/1 奖励，无部分分、无引用奖励）、`rl_think`（带推理）。`--gold_prob 0` 是不带示范的纯强化学习，`--modes base` 是只用原题。
