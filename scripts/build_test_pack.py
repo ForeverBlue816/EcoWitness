@@ -1,6 +1,6 @@
 """Assemble the public test pack for external evaluators.
 
-    python scripts/build_test_pack.py            # -> ../ecowitness_testpack_v9/ and ../ecowitness_testpack_v9.tar.gz
+    python scripts/build_test_pack.py            # -> ../ecowitness_testpack_v10/ and ../ecowitness_testpack_v10.tar.gz
 
 Public test records keep only what is needed to run a model: the conversation, the revision notices, ids and
 family/tier labels. Removed: target, truth, edit_class (flip / keep = the label), the full edit dicts (only type and the
@@ -24,7 +24,7 @@ ROOT = HERE.parent                                  # folder that holds satellit
 sys.path.insert(0, str(HERE))
 from ecowitness.runner import load_jsonl  # noqa: E402
 
-NAME = 'ecowitness_testpack_v9'
+NAME = 'ecowitness_testpack_v10'
 LANGS = ('en',)   # the released benchmark is English only
 PACK = ROOT / NAME
 PUBLIC_KEYS = ('id', 'qa_id', 'sample_id', 'family', 'group', 'tier', 'lang', 'mode', 'messages')
@@ -59,7 +59,7 @@ def main():
     if PACK.exists():
         shutil.rmtree(PACK)
     (PACK / 'ecowitness').mkdir(parents=True)
-    manifest = {'name': NAME, 'source': 'ecowitness/data (built from qualitative_benchmark_20261105_v9)', 'files': {}, 'counts': {}}
+    manifest = {'name': NAME, 'source': 'ecowitness/data (built from qualitative_benchmark_20261110_v10)', 'files': {}, 'counts': {}}
     images = set()
     for lang in LANGS:
         test = load_jsonl(HERE / 'data' / f'test.{lang}.jsonl')

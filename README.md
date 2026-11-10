@@ -1,6 +1,6 @@
-# EcoWitness：反事实等变训练与证据审核评测（Qwen3.5 + v9 河流生态基准）
+# EcoWitness：反事实等变训练与证据审核评测（Qwen3.5 + v10 河流生态基准）
 
-把 v9 基准（v8 的出题规则 + 在实验室原始注释上重建的 DNA 证据，1,334 个 DNA 样点，另加 D6–D9 四个基于科和 reads 占比的多样性题族，共 31 个题族）的每道题改写成“证人协议”。
+把 v10 基准（v8 的出题规则 + 以实验室物种 × 样点 reads 总表为准的 DNA 证据，3,135 个有物种名录的样点，含 D6–D9 四个基于科和 reads 占比的多样性题族，共 31 个题族）的每道题改写成“证人协议”。
 数据只用英文（`--langs en`，配置里 `langs: [en]`）；中文版本仍可由生成器产出，但不再训练和发布：每条证据有编号（IMG、R1、SP-01、ROW-01…），模型回答时必须给出
 `answer / support / load_bearing` 三行；再由生成器对证据做反事实编辑，精确算出编辑后的真值。
 
@@ -34,8 +34,8 @@ ecowitness/
 cd C:\Users\yanlong.chen\Desktop\数据集\ecowitness
 %USERPROFILE%\.local\bin\python3.14.exe -X utf8 -m ecowitness.build_revisions --splits train val test --out data
 ```
-依赖同级目录的 `qualitative_benchmark_20261105_v9/`（含 tools、reports/answer_evidence.jsonl 与 reports/dna_evidence.json）
-和 `Allsample_features_outputs/`。约 10 分钟。设 `EW_BENCH=qualitative_benchmark_20261026_v8` 可改回 v8（v8 用 v5 的 DNA 证据）。
+依赖同级目录的 `qualitative_benchmark_20261110_v10/`（含 tools、reports/answer_evidence.jsonl 与 reports/dna_evidence.json）
+和 `Allsample_features_outputs/`。约 10 分钟。设 `EW_BENCH=qualitative_benchmark_20261105_v9` 或 `..._20261026_v8` 可重建旧版本。
 生成器先用规则把基准三个 split 的全部答案重算一遍并断言一致，再做修订；统计写入 `data/stats.json`。
 
 记录格式（每行一条）：`mode` 为 `base`（原题，目标含 support / load_bearing）、`revise`（原题 + 模型原答案 + 一条修订通知，
@@ -138,7 +138,7 @@ export OPENAI_API_KEY=sk-...; export OPENAI_BASE_URL=https://dashscope.aliyuncs.
 python -m ecowitness.evaluate_api --model qwen3-vl-plus --split test --langs en --modes base revise --out runs/api_qwen --no_thinking
 ```
 
-**公开测试包**：`python scripts/build_test_pack.py` 生成 `../ecowitness_testpack_v9/`（不含答案的 test、含答案的 dev、影像、运行与打分代码、
+**公开测试包**：`python scripts/build_test_pack.py` 生成 `../ecowitness_testpack_v10/`（不含答案的 test、含答案的 dev、影像、运行与打分代码、
 README）和 tar.gz。外部评测者回传 `predictions.jsonl`，在本目录用 `score.py` 对 `data/test.*.jsonl` 打分。
 
 ## 六、训练细节
@@ -148,8 +148,8 @@ README）和 tar.gz。外部评测者回传 `predictions.jsonl`，在本目录�
   + `lambda_flip` × 铰链 relu(log p_edit(y_old) − log p_base(y_old) + `flip_margin`)（silent flip：原答案在编辑后的证据下必须至少掉 `flip_margin` 个 nat）。
 - 分组：Dataset 把一道 base 题和它的伴随记录放进同一组（`companions` 优先级：silent:invariant → silent:flip → silent:equivariant → revise:keep_uncited，
   `group_size` 默认 3），组的填充代价（成员数 × 最长成员的近似 token 数）超过 `group_budget`（8000）时伴随记录退为单独样本（只算交叉熵）。
-- 图像 256×256，Qwen3.5 下只占 64 个视觉 token；单条对话一般 1–2k token；v9 最长的训练对话约 4.8k token（两个样点名录对比的 D3 题），`max_length` 设为 6144。
-- 训练集：base 20,154 + revise 65,739 + silent（每题 2 条 + 一半的题 1 条置换）= 136,237 条对话（silent 50,344）；`equivariance.yaml` 跑 2 轮，计算量与 `base.yaml` 的 3 × 86k 相当。
+- 图像 256×256，Qwen3.5 下只占 64 个视觉 token；单条对话一般 1–2k token；v10 最长的训练对话约 5.0k token，`max_length` 设为 6144。
+- 训练集（v10）：base 38,547 + revise 139,308 + silent 96,326（每题 2 条 + 一半的题 1 条置换）= 274,181 条对话，是 v9 的两倍；`equivariance*.yaml` 改为 1 轮（274k，与 v9 时 2 × 136k 的计算量相当），`base.yaml` 等旧方法配置改为 2 轮（2 × 178k）。
   4×A100 64 GB、每卡 1 组、梯度累积 8，作业时限 24 小时；先用 `TRAIN_EXTRA="--max_items 2000 --epochs 1"` 试跑量一下真实速度。
 - 消融：`equivariance_ce_only`（同样的数据，只有交叉熵）、`equivariance_generic`（去掉四个生态轴）、`base`（旧方法：只有 keep_uncited 隔离损失，无 silent）、
   `no_isolation`、`answer_only`、`base_questions_only`。

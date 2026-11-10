@@ -1,4 +1,4 @@
-"""EcoWitness: evidence-revision training and evaluation for the v9 river-ecology benchmark."""
+"""EcoWitness: evidence-revision training and evaluation for the v10 river-ecology benchmark."""
 import glob as _glob
 import os as _os
 import sys as _sys

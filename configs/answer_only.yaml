@@ -6,7 +6,7 @@ pair: false
 lambda_iso: 0.0
 lora_r: 32
 lora_alpha: 64
-epochs: 3
+epochs: 2              # v10 train set is twice the v9 one (274k conversations with silent records, 178k without)
 lr: 1.0e-4
 batch_size: 1
 grad_accum: 8

@@ -18,8 +18,9 @@ from datetime import date, timedelta
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-# Source benchmark: v9 by default (v8 rules on the rebuilt DNA evidence); EW_BENCH=qualitative_benchmark_20261026_v8 for v8.
-BENCH = ROOT / os.environ.get('EW_BENCH', 'qualitative_benchmark_20261105_v9')
+# Source benchmark: v10 by default (v8 rules; species lists and read shares from the lab read table).
+# EW_BENCH=qualitative_benchmark_20261105_v9 rebuilds the v9 data, EW_BENCH=qualitative_benchmark_20261026_v8 the v8 data.
+BENCH = ROOT / os.environ.get('EW_BENCH', 'qualitative_benchmark_20261110_v10')
 V8 = BENCH  # older name, kept for callers
 sys.path.insert(0, str(BENCH / 'tools'))
 bv = importlib.import_module(sorted(p.stem for p in (BENCH / 'tools').glob('build_v*.py'))[-1])

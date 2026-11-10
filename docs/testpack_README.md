@@ -1,8 +1,8 @@
-# EcoWitness v9 test pack: evidence auditing and revision in river ecology
+# EcoWitness v10 test pack: evidence auditing and revision in river ecology
 
 This pack measures whether a multimodal model can **answer from evidence, say which evidence it relied on, and update
 (or refuse to update) its answer when the evidence is revised**. Questions come from Chinese river sites: Sentinel-2
-satellite chips, eDNA fish lists with read shares, site records and species knowledge. Every question has four options;
+satellite chips, eDNA fish lists with read shares (species-level detections from the laboratory read table), site records and species knowledge. Every question has four options;
 after a revision no option may fit any more, and the correct answer is then `none`.
 
 The test set ships without answers. Run your model, then return `predictions.jsonl` to the pack owner for scoring. The
@@ -55,8 +55,8 @@ Sizes:
 
 | | base | silent | revise | chain | chain steps | generations |
 |---|---|---|---|---|---|---|
-| test | 4,707 | 18,758 | 14,470 | 4,707 | 16,513 | 59,155 |
-| dev | 2,123 | 8,407 | 6,739 | 2,123 | 7,461 | 26,853 |
+| test | 7,523 | 32,461 | 25,738 | 7,523 | 26,341 | 99,586 |
+| dev | 3,449 | 14,917 | 12,039 | 3,449 | 12,200 | 46,054 |
 
 Per question the test set has about four silent records: two edited-evidence versions (one that should not change the
 answer, one that must), one with reordered options, and up to two with a witness removed.
@@ -97,10 +97,10 @@ Greedy decoding; `--max_new_tokens 64` is enough (the reply is three or four lin
 Produce `predictions.jsonl` in this format, one record per line:
 
 ```json
-{"id": "Q9_..|en|base",  "lang": "en", "mode": "base",   "output": "answer: B\nsupport: [...]\nload_bearing: [...]"}
-{"id": "Q9_..|en|s1",    "lang": "en", "mode": "silent", "output": "answer: B\nsupport: [...]\nload_bearing: [...]"}
-{"id": "Q9_..|en|e2",    "lang": "en", "mode": "revise", "output": "changed: yes\nanswer: none\n..."}
-{"id": "Q9_..|en|chain", "lang": "en", "mode": "chain",  "history": "own", "base_output": "...", "step_outputs": ["...", "..."]}
+{"id": "Q10_..|en|base",  "lang": "en", "mode": "base",   "output": "answer: B\nsupport: [...]\nload_bearing: [...]"}
+{"id": "Q10_..|en|s1",    "lang": "en", "mode": "silent", "output": "answer: B\nsupport: [...]\nload_bearing: [...]"}
+{"id": "Q10_..|en|e2",    "lang": "en", "mode": "revise", "output": "changed: yes\nanswer: none\n..."}
+{"id": "Q10_..|en|chain", "lang": "en", "mode": "chain",  "history": "own", "base_output": "...", "step_outputs": ["...", "..."]}
 ```
 
 `messages` is the conversation to send: `role` is `system` / `user` / `assistant`; a `user` content is a list of
@@ -206,13 +206,13 @@ max tokens, and which modes you ran.
 
 | predictor | base acc | faithful | LB F1 | post-revision acc | changed F1 | contagion | inertia | stale cite | chain final |
 |---|---|---|---|---|---|---|---|---|---|
-| random option | 0.249 | 0.079 | 0.25 | 0.211 | 0.61 | 1.00 | 0.00 | 0.34 | 0.181 |
-| always keep the previous reply | 0.254 | 0.078 | 0.25 | 0.560 | 0.00 | 0.00 | 1.00 | 0.74 | 0.180 |
-| always `none` after a revision | 0.249 | 0.084 | 0.25 | 0.155 | 0.61 | 1.00 | 0.00 | 0.00 | 0.185 |
+| random option | 0.254 | 0.053 | 0.20 | 0.206 | 0.60 | 1.00 | 0.00 | 0.26 | 0.176 |
+| always keep the previous reply | 0.244 | 0.052 | 0.20 | 0.574 | 0.00 | 0.00 | 1.00 | 0.73 | 0.173 |
+| always `none` after a revision | 0.249 | 0.052 | 0.20 | 0.182 | 0.60 | 1.00 | 0.00 | 0.00 | 0.164 |
 | gold answers | 1.000 | 1.000 | 1.00 | 1.000 | 1.00 | 0.00 | 0.00 | 0.00 | 1.000 |
 
-Two reminders: 56.0 % of revision items should keep the previous answer, so post-revision accuracy must be read
-together with inertia and `flip_accuracy`; `none` is the correct answer for 15.5 % of revision items.
+Two reminders: 57.4 % of revision items should keep the previous answer, so post-revision accuracy must be read
+together with inertia and `flip_accuracy`; `none` is the correct answer for 18.2 % of revision items.
 
 ## 9. The protocol (system prompt)
 

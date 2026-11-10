@@ -1,4 +1,4 @@
-"""Build the EcoWitness dataset from the benchmark (v9 by default, EW_BENCH selects another): witness-protocol base
+"""Build the EcoWitness dataset from the benchmark (v10 by default, EW_BENCH selects another): witness-protocol base
 questions, single-step counterfactual revisions (flip / keep-cited / keep-uncited), multi-step revision chains, and
 silent counterfactuals (the edited evidence asked as a fresh question: no notice, no previous reply) along the
 ecological axes (taxonomy, trait, abundance, status) and the generic ones (witness, image, record, presentation).
@@ -49,7 +49,7 @@ def load_pools(evidence, records_by_split):
         if e['task'][0] == 'A' and e['tier'] in ('easy', 'medium') and e['sample_id'] in images:
             labels[(e['sample_id'], e['task'])] = e['label']['category']
             by_family[(e['task'], e['split'])].append(e['sample_id'])
-    dna_path = V8 / 'reports/dna_evidence.json'          # v9 ships its own DNA evidence
+    dna_path = V8 / 'reports/dna_evidence.json'          # v9 and v10 ship their own DNA evidence
     if not dna_path.exists():
         dna_path = V5 / 'reports/dna_evidence.json'      # v8 used the v5 evidence
     dna = json.loads(dna_path.read_text(encoding='utf8'))

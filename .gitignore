@@ -6,5 +6,5 @@ logs/
 __pycache__/
 *.pyc
 .DS_Store
-data_v8/
+data_v*/
 *.log

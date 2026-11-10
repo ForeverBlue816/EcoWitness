@@ -14,7 +14,7 @@ flip_margin: 1.0
 lora_r: 32
 lora_alpha: 64
 lora_dropout: 0.05
-epochs: 2              # ~136k train conversations per epoch (base + revise + silent); about the cost of base.yaml's 3 x 86k
+epochs: 1              # v10 train set is twice the v9 one (274k conversations with silent records, 178k without)
 lr: 1.0e-4
 batch_size: 1
 grad_accum: 8
