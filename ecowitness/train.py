@@ -78,12 +78,18 @@ class WitnessTrainer(Trainer):
     def compute_loss(self, model, inputs, return_outputs=False, num_items_in_batch=None):
         answer_pos, group, kind = inputs.pop('answer_pos'), inputs.pop('cf_group'), inputs.pop('cf_kind')
         perm, old = inputs.pop('cf_perm'), inputs.pop('cf_old')
-        outputs = model(**inputs)
-        loss = outputs.loss
+        labels = inputs.pop('labels')
+        # Only the assistant target (a short suffix) is supervised, so project onto the 248k vocabulary only at the
+        # positions that predict a target token (union over the batch) instead of at every prompt / image position:
+        # full-sequence logits of a 3-member group are ~4 GB in bf16 plus their fp32 copy and gradient (CUDA OOM).
+        keep = (labels[:, 1:] != -100).any(0).nonzero().flatten()   # position p predicts token p + 1
+        outputs = model(**inputs, logits_to_keep=keep)
+        logits = outputs.logits.float()                               # (B, len(keep), V)
+        loss = F.cross_entropy(logits.flatten(0, 1), labels[:, keep + 1].flatten(), ignore_index=-100)
         if (self.lambda_iso > 0 or self.lambda_flip > 0) and (group >= 0).any():
-            logits = outputs.logits
             idx = torch.arange(logits.shape[0], device=logits.device)
-            sel = logits[idx, answer_pos - 1][:, self.letter_ids].float()  # logits that predict the answer token
+            col = torch.searchsorted(keep, answer_pos - 1)               # column of the position predicting the answer
+            sel = logits[idx, col][:, self.letter_ids]                    # logits that predict the answer token
             logp = F.log_softmax(sel, dim=-1)
             iso, equiv, flip = [], [], []
             for g in group[group >= 0].unique():
