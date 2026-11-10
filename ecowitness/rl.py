@@ -170,31 +170,45 @@ class Policy:
         return t if (not self.cfg['think'] or '</think>' in t) else ''
 
     def loss(self, prompts, images, replies, weights, n_prompts):
-        """- sum_c w_c * mean_t log pi(reply_c[t]) / n_prompts, one padded forward pass over the selected candidates."""
-        batch = self.encode(prompts, images, 'right')
+        """- sum_c w_c * mean_t log pi(reply_c[t]) / n_prompts, one forward pass over the selected candidates.
+
+        Sequences are padded on the left so that every reply ends at the last position. The vocabulary projection
+        (248k entries) is then needed only at the last `longest reply` positions (`logits_to_keep`), not at every
+        prompt and image position: full-sequence logits ran out of memory in supervised training on the 64 GB A100s."""
+        batch = self.encode(prompts, images, 'left')
         ids, att = batch['input_ids'], batch['attention_mask']
         lens = att.sum(1).tolist()
+        old_width = ids.shape[1]
         width = max(l + len(r) for l, r in zip(lens, replies))
+        longest = max(len(r) for r in replies)
         new_ids = torch.full((len(prompts), width), self.pad, dtype=ids.dtype)
         new_att = torch.zeros((len(prompts), width), dtype=att.dtype)
+        shifts = []
         for j, (l, r) in enumerate(zip(lens, replies)):
-            new_ids[j, :l] = ids[j, :l]
-            new_ids[j, l:l + len(r)] = torch.tensor(r, dtype=ids.dtype)
-            new_att[j, :l + len(r)] = 1
+            start = width - len(r) - l                                  # left padding of this row
+            new_ids[j, start:start + l] = ids[j, old_width - l:]
+            new_ids[j, width - len(r):] = torch.tensor(r, dtype=ids.dtype)
+            new_att[j, start:] = 1
+            shifts.append(start - (old_width - l))
         extra = {}
         for key, v in batch.items():
             if key in ('input_ids', 'attention_mask'):
                 continue
-            if torch.is_tensor(v) and v.dim() == 2 and v.shape == ids.shape:   # other per-token tensors: extend with zeros
+            if torch.is_tensor(v) and v.dim() == 2 and v.shape == ids.shape:   # other per-token tensors: move with the tokens
                 e = torch.zeros((len(prompts), width), dtype=v.dtype)
-                e[:, :v.shape[1]] = v
+                for j, (l, sh) in enumerate(zip(lens, shifts)):
+                    e[j, old_width - l + sh:old_width + sh] = v[j, old_width - l:]
                 v = e
             extra[key] = v
         inputs = {'input_ids': new_ids.to(self.device), 'attention_mask': new_att.to(self.device), **{k: (v.to(self.device) if torch.is_tensor(v) else v) for k, v in extra.items()}}
-        logits = self.model(**inputs).logits
+        keep = longest + 1                                              # positions width-longest-1 .. width-1
+        logits = self.model(**inputs, logits_to_keep=keep).logits       # (candidates, keep, vocabulary)
+        if logits.shape[1] != keep:
+            raise RuntimeError(f'the model ignored logits_to_keep: got {tuple(logits.shape)}')
         total = logits.new_zeros((), dtype=torch.float32)
-        for j, (l, r) in enumerate(zip(lens, replies)):
-            ce = F.cross_entropy(logits[j, l - 1:l - 1 + len(r)].float(), new_ids[j, l:l + len(r)].to(self.device), reduction='mean')
+        for j, r in enumerate(replies):
+            # column c holds position width - keep + c, which predicts the token at width - keep + c + 1
+            ce = F.cross_entropy(logits[j, keep - 1 - len(r):keep - 1].float(), new_ids[j, width - len(r):].to(self.device), reduction='mean')
             total = total + weights[j] * ce
         return total / n_prompts
 
