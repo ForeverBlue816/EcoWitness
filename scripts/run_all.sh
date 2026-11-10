@@ -5,7 +5,8 @@
 #   RUN=base CONFIG=configs/base.yaml bash scripts/run_all.sh     # previous method: SFT + isolation loss
 #   bash scripts/run_all.sh zeroshot           # only the zero-shot evaluation
 #   bash scripts/run_all.sh ablations          # every config in configs/ (each train + eval)
-#   TRAIN_EXTRA="--max_items 2000 --epochs 1" RUN=trial bash scripts/run_all.sh    # small trial run
+#   bash scripts/run_all.sh trial              # 30-minute trial on the debug QOS: 1 node, 4 GPUs, 100 RL steps, no evaluation
+#   CONFIG=configs/equivariance.yaml bash scripts/run_all.sh trial     # the same for a supervised config (2,000 groups)
 set -euo pipefail
 cd "$(dirname "$0")/.."
 EW_VARS_ONLY=1 source scripts/cineca_env.sh
@@ -26,6 +27,19 @@ submit_pair () {   # $1=run name  $2=config
 }
 
 case "${1:-main}" in
+  trial)
+    # Speed / memory check, not a result: the debug QOS starts within minutes and stops the job after 30 minutes.
+    # The log of the steps that ran is what matters; a time-out is fine.
+    cfg=${CONFIG:-configs/rl.yaml}
+    case "$(basename "$cfg")" in
+      rl*) extra="--episodes 1600 --logging_steps 5 --save_steps 100000" ;;   # 100 steps on 4 GPUs
+      *)   extra="--max_items 2000 --epochs 1 --logging_steps 5 --save_steps 100000" ;;
+    esac
+    tid=$(RUN=${RUN:-trial} CONFIG=$cfg TRAIN_EXTRA="${TRAIN_EXTRA:-$extra}" sbatch -A "$EW_ACCOUNT" -p "$EW_PARTITION" --parsable \
+          --qos="${EW_TRIAL_QOS:-boost_qos_dbg}" --time=00:30:00 --nodes=1 --gres=gpu:4 --job-name=ecowitness_trial scripts/train.slurm)
+    echo "trial  job $tid  ($cfg, 1 node x 4 GPUs, 30 min)   log: logs/train_$tid.out"
+    squeue -u "$USER" --start
+    exit 0 ;;
   zeroshot)
     RUN=zeroshot ADAPTER=none sbatch -A "$EW_ACCOUNT" -p "$EW_PARTITION" scripts/eval.slurm ;;
   ablations)

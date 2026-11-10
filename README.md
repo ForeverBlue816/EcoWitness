@@ -115,7 +115,7 @@ bash scripts/run_all.sh            # 主实验（configs/rl.yaml，强化学习�
 RUN=equivariance CONFIG=configs/equivariance.yaml bash scripts/run_all.sh   # 监督基线：反事实等变
 bash scripts/run_all.sh ablations  # configs/ 下每个配置各提交一对 train+eval
 RUN=base CONFIG=configs/base.yaml bash scripts/run_all.sh      # 旧方法基线：SFT + 隔离损失
-TRAIN_EXTRA="--episodes 1600" RUN=trial sbatch scripts/train.slurm           # 强化学习小规模试跑（100 步），看每步耗时和奖励走势
+bash scripts/run_all.sh trial      # 试跑：调试队列，1 节点 4 卡，30 分钟，强化学习 100 步，看每步耗时、显存和奖励走势
 RUN=rl_think CONFIG=configs/rl_think.yaml TRAIN_EXTRA="--init_adapter $RUNS_DIR/rl/adapter" sbatch scripts/train.slurm   # 带推理的强化学习，从 rl 的 adapter 接着训
 RUN=rl_think EVAL_EXTRA="--think --max_new_tokens 1040" sbatch scripts/eval.slurm                                         # 评测带推理的模型
 ```
