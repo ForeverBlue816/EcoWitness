@@ -1,0 +1,377 @@
+{
+ "meta": {
+  "model": "/lambda/nfs/ICLR/ecowitness/models/Qwen3.5-9B",
+  "adapter": "/lambda/nfs/ICLR/ecowitness/runs/rl/adapter",
+  "think": false,
+  "max_new_tokens": 640,
+  "split": "test",
+  "teacher_forced": false,
+  "own_history": false,
+  "seconds": 6255.4
+ },
+ "has_truth": true,
+ "coverage": {
+  "en/base": {
+   "predicted": 7523,
+   "total": 7523
+  },
+  "en/silent": {
+   "predicted": 32461,
+   "total": 32461
+  }
+ },
+ "unknown_prediction_ids": 0,
+ "en": {
+  "base": {
+   "n": 7523,
+   "parse_rate": 1.0,
+   "full_format_rate": 1.0,
+   "invalid_citation_rate": 0.0,
+   "mean_support_size": 6.4158,
+   "mean_load_bearing_size": 3.1026,
+   "accuracy": {
+    "all": 0.9088,
+    "family:A1-NearshoreCover": 0.7143,
+    "family:A2-LandscapePattern": 0.8184,
+    "family:A3-ChannelWidth": 0.7838,
+    "family:A4-WaterFraction": 0.8516,
+    "family:A5-Sinuosity": 0.4516,
+    "family:A6-RiparianVegetation": 0.4823,
+    "family:A7-BuiltUpBank": 0.64,
+    "family:B1-DominantGuild": 0.9801,
+    "family:B3-UniqueCarrier": 1.0,
+    "family:B4-PairedProfile": 1.0,
+    "family:B5-GatedTrace": 0.9091,
+    "family:B6-StatusCount": 0.6014,
+    "family:C1-SceneAndCommunity": 0.6481,
+    "family:C2-MigrationBarrier": 1.0,
+    "family:C3-ImageTiming": 0.985,
+    "family:D1-ThreatenedRecords": 1.0,
+    "family:D2-DetectionPlausibility": 1.0,
+    "family:D3-SiteComparison": 1.0,
+    "family:D4-RareSpeciesCount": 0.7943,
+    "family:D5-SharedSpecies": 0.8165,
+    "family:D6-FamilyRichness": 0.9335,
+    "family:D7-ReadDominance": 1.0,
+    "family:D8-RareDetectionCount": 0.832,
+    "family:D9-DominanceClass": 0.9897,
+    "family:E1-ConnectivityStatus": 1.0,
+    "family:E2-ReachType": 1.0,
+    "family:K1-NonNativeSet": 0.9862,
+    "family:K3-MarineStraySet": 0.7755,
+    "family:K4-FourCarpsSet": 1.0,
+    "family:K5-LargeBodiedSet": 0.9961,
+    "family:K6-SeaRouteSet": 0.9737,
+    "group:A": 0.7233,
+    "group:B": 0.9495,
+    "group:C": 0.9264,
+    "group:D": 0.9408,
+    "group:E": 1.0,
+    "group:K": 0.9838,
+    "tier:easy": 0.9311,
+    "tier:hard": 0.9108,
+    "tier:medium": 0.8857
+   },
+   "accuracy_ci95": [
+    0.9023,
+    0.9149
+   ],
+   "abstention": {
+    "n_truth_none": 0,
+    "precision": 0.0,
+    "recall": 0.0,
+    "f1": 0.0,
+    "false_none_rate": 0.0047
+   },
+   "citation": {
+    "support": {
+     "precision": 0.9973,
+     "recall": 0.9977,
+     "f1": 0.9975
+    },
+    "load_bearing": {
+     "precision": 0.9953,
+     "recall": 0.9702,
+     "f1": 0.9826
+    }
+   },
+   "load_bearing_exact": 0.9653,
+   "sufficiency": 0.9944,
+   "faithful_accuracy": 0.8848,
+   "load_bearing_exact_given_correct": 0.9735
+  },
+  "silent": {
+   "n": 32461,
+   "parse_rate": 1.0,
+   "invalid_citation_rate": 0.0058,
+   "accuracy": {
+    "all": 0.9105,
+    "axis:abundance": 0.9183,
+    "axis:image": 0.8069,
+    "axis:presentation": 0.9077,
+    "axis:record": 0.993,
+    "axis:status": 0.9005,
+    "axis:taxonomy": 0.908,
+    "axis:trait": 0.9589,
+    "axis:witness": 0.9325,
+    "effect:equivariant": 0.9077,
+    "effect:flip": 0.8899,
+    "effect:invariant": 0.931,
+    "family:A1-NearshoreCover": 0.7246,
+    "family:A2-LandscapePattern": 0.8456,
+    "family:A3-ChannelWidth": 0.9099,
+    "family:A4-WaterFraction": 0.8425,
+    "family:A5-Sinuosity": 0.4624,
+    "family:A6-RiparianVegetation": 0.5914,
+    "family:A7-BuiltUpBank": 0.6933,
+    "family:B1-DominantGuild": 0.9536,
+    "family:B3-UniqueCarrier": 1.0,
+    "family:B4-PairedProfile": 0.9985,
+    "family:B5-GatedTrace": 0.8868,
+    "family:B6-StatusCount": 0.5371,
+    "family:C1-SceneAndCommunity": 0.5272,
+    "family:C2-MigrationBarrier": 0.9982,
+    "family:C3-ImageTiming": 0.9863,
+    "family:D1-ThreatenedRecords": 1.0,
+    "family:D2-DetectionPlausibility": 1.0,
+    "family:D3-SiteComparison": 0.9956,
+    "family:D4-RareSpeciesCount": 0.7887,
+    "family:D5-SharedSpecies": 0.7949,
+    "family:D6-FamilyRichness": 0.8804,
+    "family:D7-ReadDominance": 0.9967,
+    "family:D8-RareDetectionCount": 0.7921,
+    "family:D9-DominanceClass": 0.9904,
+    "family:E1-ConnectivityStatus": 1.0,
+    "family:E2-ReachType": 0.9921,
+    "family:K1-NonNativeSet": 0.9917,
+    "family:K3-MarineStraySet": 0.7347,
+    "family:K4-FourCarpsSet": 1.0,
+    "family:K5-LargeBodiedSet": 0.95,
+    "family:K6-SeaRouteSet": 0.9316,
+    "group:A": 0.7589,
+    "group:B": 0.9372,
+    "group:C": 0.8801,
+    "group:D": 0.9239,
+    "group:E": 0.9971,
+    "group:K": 0.9694
+   },
+   "accuracy_ci95": [
+    0.9077,
+    0.9137
+   ],
+   "citation": {
+    "support": {
+     "precision": 0.9924,
+     "recall": 0.997,
+     "f1": 0.9947
+    },
+    "load_bearing": {
+     "precision": 0.9937,
+     "recall": 0.965,
+     "f1": 0.9791
+    }
+   },
+   "faithful_accuracy": 0.8805,
+   "invariance_rate": 0.9516,
+   "invariance_ci95": [
+    0.948,
+    0.9553
+   ],
+   "invariant_accuracy": 0.931,
+   "flip_rate": 0.901,
+   "flip_accuracy": 0.8899,
+   "flip_accuracy_ci95": [
+    0.8846,
+    0.8959
+   ],
+   "permutation_equivariance": 0.9579,
+   "permutation_both_correct": 0.8911,
+   "by_axis": {
+    "abundance": {
+     "n": 918,
+     "accuracy": 0.9183,
+     "invariance_rate": 0.9808,
+     "flip_rate": 0.9121,
+     "flip_accuracy": 0.897
+    },
+    "image": {
+     "n": 3433,
+     "accuracy": 0.8069,
+     "invariance_rate": 0.6939,
+     "flip_rate": 0.8671,
+     "flip_accuracy": 0.8157
+    },
+    "record": {
+     "n": 1287,
+     "accuracy": 0.993,
+     "invariance_rate": 0.9957,
+     "flip_rate": 0.9882,
+     "flip_accuracy": 0.9898
+    },
+    "status": {
+     "n": 1085,
+     "accuracy": 0.9005,
+     "invariance_rate": 0.9658,
+     "flip_rate": 0.9101,
+     "flip_accuracy": 0.9114
+    },
+    "taxonomy": {
+     "n": 6481,
+     "accuracy": 0.908,
+     "invariance_rate": 0.99,
+     "flip_rate": 0.8479,
+     "flip_accuracy": 0.8398
+    },
+    "trait": {
+     "n": 1264,
+     "accuracy": 0.9589,
+     "invariance_rate": 0.9985,
+     "flip_rate": 0.9444,
+     "flip_accuracy": 0.9394
+    },
+    "witness": {
+     "n": 10470,
+     "accuracy": 0.9325,
+     "invariance_rate": 0.9825,
+     "flip_rate": 0.9216,
+     "flip_accuracy": 0.9201
+    }
+   },
+   "by_relation": {
+    "congener_other_profile": {
+     "n": 685,
+     "accuracy": 0.8613,
+     "invariance_rate": 0.9938,
+     "flip_rate": 0.8194,
+     "flip_accuracy": 0.7861
+    },
+    "congener_same_profile": {
+     "n": 2078,
+     "accuracy": 0.9269,
+     "invariance_rate": 0.9912,
+     "flip_rate": 0.8519,
+     "flip_accuracy": 0.858
+    },
+    "other_family_same_profile": {
+     "n": 1122,
+     "accuracy": 0.8948,
+     "invariance_rate": 0.9807,
+     "flip_rate": 0.8025,
+     "flip_accuracy": 0.8076
+    },
+    "random": {
+     "n": 2596,
+     "accuracy": 0.911,
+     "invariance_rate": 0.9926,
+     "flip_rate": 0.869,
+     "flip_accuracy": 0.8585
+    },
+    "note": "reassignments: congener_same_profile = same family and ecological profile (a name change that should not matter), congener_other_profile = same family, different traits; other_family_same_profile; random"
+   },
+   "attribution_faithfulness": {
+    "n": 10419,
+    "agreement": 0.953,
+    "stated_vs_measured": {
+     "precision": 0.9313,
+     "recall": 0.9708,
+     "f1": 0.9506
+    },
+    "stated_rate": 0.4861,
+    "measured_rate": 0.4664,
+    "measured_vs_truth": 0.9525,
+    "note": "stated = the removed witness was in the load_bearing set the model gave for the base question; measured = the answer actually changed when the witness was silently removed"
+   }
+  },
+  "ecology": {
+   "competency_profile": {
+    "community_trait_reasoning": {
+     "n": 7179,
+     "accuracy": 0.9393,
+     "faithful_accuracy": 0.8749,
+     "load_bearing_f1": 0.9884
+    },
+    "diversity_and_conservation": {
+     "n": 14678,
+     "accuracy": 0.9268,
+     "faithful_accuracy": 0.9055,
+     "load_bearing_f1": 0.9884
+    },
+    "habitat_from_imagery": {
+     "n": 5796,
+     "accuracy": 0.75,
+     "faithful_accuracy": 0.75,
+     "load_bearing_f1": 1.0
+    },
+    "river_network_and_connectivity": {
+     "n": 2268,
+     "accuracy": 0.9978,
+     "faithful_accuracy": 0.9978,
+     "load_bearing_f1": 1.0
+    },
+    "scene_community_fusion": {
+     "n": 4141,
+     "accuracy": 0.8894,
+     "faithful_accuracy": 0.8116,
+     "load_bearing_f1": 0.8343
+    },
+    "species_knowledge": {
+     "n": 5922,
+     "accuracy": 0.9718,
+     "faithful_accuracy": 0.9618,
+     "load_bearing_f1": 0.9878
+    }
+   },
+   "conservation_items": {
+    "n": 6180,
+    "accuracy": 0.9207,
+    "note": "threatened / protected / non-native / marine-stray / sea-route / native-status questions"
+   },
+   "read_abundance_items": {
+    "n": 6836,
+    "accuracy": 0.9292
+   },
+   "species_counts": {
+    "n": 7087,
+    "mean_absolute_error": 0.1737,
+    "bias": -0.0202,
+    "over_count_rate": 0.0707,
+    "under_count_rate": 0.0851,
+    "note": "count questions only (B1, B6, D4, D5, D6, D8); error in species / families, none answers excluded"
+   },
+   "habitat_bins": {
+    "n": 3632,
+    "exact_rate": 0.7178,
+    "adjacent_bin_error_rate": 0.2156,
+    "far_error_rate": 0.0666,
+    "mean_bin_distance": 0.3637,
+    "note": "ordered image classes (channel width, water fraction, sinuosity, riparian vegetation, built-up bank)"
+   },
+   "modality_grounding": {
+    "image_items_citing_image": 1.0,
+    "fusion_items_citing_both_sources": 1.0
+   }
+  }
+ },
+ "scorecard": {
+  "silent_accuracy": 0.9105,
+  "silent_invariance_rate": 0.9516,
+  "silent_flip_accuracy": 0.8899,
+  "permutation_equivariance": 0.9579,
+  "attribution_faithfulness": 0.953,
+  "attribution_faithfulness_f1": 0.9506,
+  "base_accuracy": 0.9088,
+  "base_accuracy_ci95": [
+   0.9023,
+   0.9149
+  ],
+  "faithful_accuracy": 0.8848,
+  "load_bearing_f1": 0.9826,
+  "support_f1": 0.9975,
+  "sufficiency": 0.9944,
+  "invalid_citation_rate": 0.0,
+  "conservation_accuracy": 0.9207,
+  "species_count_mae": 0.1737,
+  "habitat_far_error_rate": 0.0666,
+  "parse_rate": 1.0
+ }
+}

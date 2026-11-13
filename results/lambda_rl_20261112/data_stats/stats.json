@@ -1,0 +1,371 @@
+{
+ "train": {
+  "base": {
+   "A1-NearshoreCover": 720,
+   "A2-LandscapePattern": 1454,
+   "A3-ChannelWidth": 158,
+   "A4-WaterFraction": 1131,
+   "A5-Sinuosity": 70,
+   "A6-RiparianVegetation": 587,
+   "A7-BuiltUpBank": 835,
+   "B1-DominantGuild": 1547,
+   "B3-UniqueCarrier": 1843,
+   "B4-PairedProfile": 5001,
+   "B5-GatedTrace": 51,
+   "B6-StatusCount": 634,
+   "C2-MigrationBarrier": 1427,
+   "C3-ImageTiming": 800,
+   "D1-ThreatenedRecords": 1051,
+   "D2-DetectionPlausibility": 817,
+   "D3-SiteComparison": 1417,
+   "D4-RareSpeciesCount": 2081,
+   "D5-SharedSpecies": 2599,
+   "D6-FamilyRichness": 1046,
+   "D7-ReadDominance": 1779,
+   "D8-RareDetectionCount": 4562,
+   "D9-DominanceClass": 1150,
+   "E1-ConnectivityStatus": 1431,
+   "E2-ReachType": 561,
+   "K1-NonNativeSet": 945,
+   "K3-MarineStraySet": 162,
+   "K4-FourCarpsSet": 1660,
+   "K5-LargeBodiedSet": 938,
+   "K6-SeaRouteSet": 90
+  },
+  "revise": {
+   "flip": 63623,
+   "keep_cited": 25405,
+   "keep_uncited": 50280
+  },
+  "revise_by_family": {
+   "A1-NearshoreCover": 720,
+   "A2-LandscapePattern": 1454,
+   "A3-ChannelWidth": 158,
+   "A4-WaterFraction": 1131,
+   "A5-Sinuosity": 70,
+   "A6-RiparianVegetation": 587,
+   "A7-BuiltUpBank": 835,
+   "B1-DominantGuild": 6188,
+   "B3-UniqueCarrier": 7372,
+   "B4-PairedProfile": 20004,
+   "B5-GatedTrace": 204,
+   "B6-StatusCount": 2536,
+   "C2-MigrationBarrier": 5708,
+   "C3-ImageTiming": 3200,
+   "D1-ThreatenedRecords": 4204,
+   "D2-DetectionPlausibility": 3268,
+   "D3-SiteComparison": 5668,
+   "D4-RareSpeciesCount": 8324,
+   "D5-SharedSpecies": 10396,
+   "D6-FamilyRichness": 4184,
+   "D7-ReadDominance": 7116,
+   "D8-RareDetectionCount": 18248,
+   "D9-DominanceClass": 4600,
+   "E1-ConnectivityStatus": 5724,
+   "E2-ReachType": 2229,
+   "K1-NonNativeSet": 3780,
+   "K3-MarineStraySet": 648,
+   "K4-FourCarpsSet": 6640,
+   "K5-LargeBodiedSet": 3752,
+   "K6-SeaRouteSet": 360
+  },
+  "edit_types": {
+   "swap_image": 6082,
+   "reassign": 25314,
+   "remove": 60697,
+   "add": 34934,
+   "set_field": 12281
+  },
+  "revised_answer": {
+   "option": 111699,
+   "none": 27609
+  },
+  "silent_axis": {
+   "image": 11510,
+   "presentation": 19232,
+   "trait": 10968,
+   "taxonomy": 35371,
+   "witness": 3342,
+   "record": 4499,
+   "status": 5419,
+   "abundance": 5985
+  },
+  "silent_effect": {
+   "invariant": 40630,
+   "flip": 36464,
+   "equivariant": 19232
+  },
+  "silent_relation": {
+   "congener_other_profile": 3421,
+   "congener_same_profile": 11591,
+   "random": 13884,
+   "other_family_same_profile": 6475
+  },
+  "ill_posed_edit": {
+   "B3-UniqueCarrier": 870,
+   "D3-SiteComparison": 686,
+   "D7-ReadDominance": 3,
+   "E2-ReachType": 2698
+  },
+  "ill_posed_silent": {
+   "B3-UniqueCarrier": 1615,
+   "D3-SiteComparison": 3062,
+   "D7-ReadDominance": 4,
+   "E2-ReachType": 2666
+  },
+  "held_out": {
+   "C1-SceneAndCommunity": 752
+  },
+  "rows": {
+   "en": 274181
+  }
+ },
+ "val": {
+  "base": {
+   "A1-NearshoreCover": 101,
+   "A2-LandscapePattern": 197,
+   "A3-ChannelWidth": 20,
+   "A4-WaterFraction": 100,
+   "A5-Sinuosity": 10,
+   "A6-RiparianVegetation": 54,
+   "A7-BuiltUpBank": 101,
+   "B1-DominantGuild": 84,
+   "B3-UniqueCarrier": 233,
+   "B4-PairedProfile": 159,
+   "B6-StatusCount": 60,
+   "C1-SceneAndCommunity": 68,
+   "C2-MigrationBarrier": 114,
+   "C3-ImageTiming": 107,
+   "D1-ThreatenedRecords": 160,
+   "D2-DetectionPlausibility": 127,
+   "D3-SiteComparison": 60,
+   "D4-RareSpeciesCount": 27,
+   "D5-SharedSpecies": 54,
+   "D6-FamilyRichness": 174,
+   "D7-ReadDominance": 245,
+   "D8-RareDetectionCount": 184,
+   "D9-DominanceClass": 124,
+   "E1-ConnectivityStatus": 207,
+   "E2-ReachType": 157,
+   "K1-NonNativeSet": 136,
+   "K3-MarineStraySet": 18,
+   "K4-FourCarpsSet": 231,
+   "K5-LargeBodiedSet": 130,
+   "K6-SeaRouteSet": 7
+  },
+  "revise": {
+   "flip": 5007,
+   "keep_cited": 2802,
+   "keep_uncited": 4230
+  },
+  "revise_by_family": {
+   "A1-NearshoreCover": 101,
+   "A2-LandscapePattern": 197,
+   "A3-ChannelWidth": 20,
+   "A4-WaterFraction": 100,
+   "A5-Sinuosity": 10,
+   "A6-RiparianVegetation": 54,
+   "A7-BuiltUpBank": 101,
+   "B1-DominantGuild": 336,
+   "B3-UniqueCarrier": 932,
+   "B4-PairedProfile": 636,
+   "B6-StatusCount": 240,
+   "C1-SceneAndCommunity": 272,
+   "C2-MigrationBarrier": 456,
+   "C3-ImageTiming": 428,
+   "D1-ThreatenedRecords": 640,
+   "D2-DetectionPlausibility": 508,
+   "D3-SiteComparison": 240,
+   "D4-RareSpeciesCount": 108,
+   "D5-SharedSpecies": 216,
+   "D6-FamilyRichness": 696,
+   "D7-ReadDominance": 980,
+   "D8-RareDetectionCount": 736,
+   "D9-DominanceClass": 496,
+   "E1-ConnectivityStatus": 828,
+   "E2-ReachType": 620,
+   "K1-NonNativeSet": 544,
+   "K3-MarineStraySet": 72,
+   "K4-FourCarpsSet": 924,
+   "K5-LargeBodiedSet": 520,
+   "K6-SeaRouteSet": 28
+  },
+  "edit_types": {
+   "swap_image": 854,
+   "add": 2686,
+   "remove": 4544,
+   "reassign": 2063,
+   "set_field": 1892
+  },
+  "revised_answer": {
+   "option": 9807,
+   "none": 2232
+  },
+  "chains": {
+   "2": 800,
+   "3": 879,
+   "4": 887,
+   "5": 883
+  },
+  "silent_axis": {
+   "image": 1381,
+   "presentation": 3449,
+   "taxonomy": 3052,
+   "witness": 4807,
+   "trait": 558,
+   "status": 512,
+   "record": 760,
+   "abundance": 398
+  },
+  "silent_effect": {
+   "invariant": 5985,
+   "flip": 5483,
+   "equivariant": 3449
+  },
+  "silent_relation": {
+   "congener_same_profile": 984,
+   "congener_other_profile": 304,
+   "other_family_same_profile": 528,
+   "random": 1236
+  },
+  "ill_posed_edit": {
+   "B3-UniqueCarrier": 90,
+   "D3-SiteComparison": 20,
+   "D7-ReadDominance": 3,
+   "E2-ReachType": 815
+  },
+  "ill_posed_silent": {
+   "B3-UniqueCarrier": 159,
+   "D3-SiteComparison": 120,
+   "D7-ReadDominance": 4,
+   "E2-ReachType": 779
+  },
+  "rows": {
+   "en": 33854
+  }
+ },
+ "test": {
+  "base": {
+   "A1-NearshoreCover": 161,
+   "A2-LandscapePattern": 380,
+   "A3-ChannelWidth": 37,
+   "A4-WaterFraction": 364,
+   "A5-Sinuosity": 31,
+   "A6-RiparianVegetation": 226,
+   "A7-BuiltUpBank": 250,
+   "B1-DominantGuild": 151,
+   "B3-UniqueCarrier": 506,
+   "B4-PairedProfile": 398,
+   "B5-GatedTrace": 11,
+   "B6-StatusCount": 143,
+   "C1-SceneAndCommunity": 162,
+   "C2-MigrationBarrier": 400,
+   "C3-ImageTiming": 267,
+   "D1-ThreatenedRecords": 330,
+   "D2-DetectionPlausibility": 252,
+   "D3-SiteComparison": 114,
+   "D4-RareSpeciesCount": 141,
+   "D5-SharedSpecies": 158,
+   "D6-FamilyRichness": 331,
+   "D7-ReadDominance": 484,
+   "D8-RareDetectionCount": 381,
+   "D9-DominanceClass": 291,
+   "E1-ConnectivityStatus": 357,
+   "E2-ReachType": 210,
+   "K1-NonNativeSet": 218,
+   "K3-MarineStraySet": 49,
+   "K4-FourCarpsSet": 426,
+   "K5-LargeBodiedSet": 256,
+   "K6-SeaRouteSet": 38
+  },
+  "revise": {
+   "flip": 10970,
+   "keep_cited": 5896,
+   "keep_uncited": 8872
+  },
+  "revise_by_family": {
+   "A1-NearshoreCover": 161,
+   "A2-LandscapePattern": 380,
+   "A3-ChannelWidth": 37,
+   "A4-WaterFraction": 364,
+   "A5-Sinuosity": 31,
+   "A6-RiparianVegetation": 226,
+   "A7-BuiltUpBank": 250,
+   "B1-DominantGuild": 604,
+   "B3-UniqueCarrier": 2024,
+   "B4-PairedProfile": 1592,
+   "B5-GatedTrace": 44,
+   "B6-StatusCount": 572,
+   "C1-SceneAndCommunity": 648,
+   "C2-MigrationBarrier": 1600,
+   "C3-ImageTiming": 1068,
+   "D1-ThreatenedRecords": 1320,
+   "D2-DetectionPlausibility": 1008,
+   "D3-SiteComparison": 456,
+   "D4-RareSpeciesCount": 564,
+   "D5-SharedSpecies": 632,
+   "D6-FamilyRichness": 1324,
+   "D7-ReadDominance": 1936,
+   "D8-RareDetectionCount": 1524,
+   "D9-DominanceClass": 1164,
+   "E1-ConnectivityStatus": 1428,
+   "E2-ReachType": 833,
+   "K1-NonNativeSet": 872,
+   "K3-MarineStraySet": 196,
+   "K4-FourCarpsSet": 1704,
+   "K5-LargeBodiedSet": 1024,
+   "K6-SeaRouteSet": 152
+  },
+  "edit_types": {
+   "swap_image": 2129,
+   "remove": 9926,
+   "reassign": 4372,
+   "add": 5728,
+   "set_field": 3583
+  },
+  "revised_answer": {
+   "option": 21044,
+   "none": 4694
+  },
+  "chains": {
+   "5": 1902,
+   "3": 1843,
+   "4": 1873,
+   "2": 1905
+  },
+  "silent_axis": {
+   "image": 3433,
+   "presentation": 7523,
+   "taxonomy": 6481,
+   "witness": 10470,
+   "trait": 1264,
+   "record": 1287,
+   "status": 1085,
+   "abundance": 918
+  },
+  "silent_effect": {
+   "invariant": 13028,
+   "flip": 11910,
+   "equivariant": 7523
+  },
+  "silent_relation": {
+   "other_family_same_profile": 1122,
+   "congener_other_profile": 685,
+   "random": 2596,
+   "congener_same_profile": 2078
+  },
+  "ill_posed_silent": {
+   "B3-UniqueCarrier": 462,
+   "D3-SiteComparison": 258,
+   "E2-ReachType": 1033
+  },
+  "ill_posed_edit": {
+   "B3-UniqueCarrier": 258,
+   "D3-SiteComparison": 52,
+   "E2-ReachType": 1045
+  },
+  "rows": {
+   "en": 73245
+  }
+ }
+}

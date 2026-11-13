@@ -1,0 +1,34 @@
+{
+ "silent_accuracy": 0.9105,
+ "silent_invariance_rate": 0.9516,
+ "silent_flip_accuracy": 0.8899,
+ "permutation_equivariance": 0.9579,
+ "attribution_faithfulness": 0.953,
+ "attribution_faithfulness_f1": 0.9506,
+ "notice_dependence": 0.0415,
+ "base_accuracy": 0.9088,
+ "base_accuracy_ci95": [
+  0.9023,
+  0.9149
+ ],
+ "faithful_accuracy": 0.8848,
+ "load_bearing_f1": 0.9826,
+ "support_f1": 0.9975,
+ "sufficiency": 0.9944,
+ "invalid_citation_rate": 0.0,
+ "none_f1_after_revision": 0.9795,
+ "post_revision_accuracy": 0.9574,
+ "changed_f1": 0.9738,
+ "contagion_rate": 0.0018,
+ "inertia_rate": 0.0199,
+ "redundancy_overreaction_rate": 0.0583,
+ "stale_citation_rate": 0.0001,
+ "chain_final_accuracy": 0.8095,
+ "chain_drift": 0.0993,
+ "chain_recovery_rate": 0.3852,
+ "conservation_accuracy": 0.9472,
+ "species_count_mae": 0.1209,
+ "habitat_far_error_rate": 0.0718,
+ "parse_rate": 1.0
+}
+written /lambda/nfs/ICLR/ecowitness/runs/rl/eval_test/metrics.json

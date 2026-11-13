@@ -1,0 +1,10 @@
+Python 3.12.16
+index, name, memory.total [MiB], driver_version
+0, NVIDIA H100 80GB HBM3, 81559 MiB, 580.105.08
+1, NVIDIA H100 80GB HBM3, 81559 MiB, 580.105.08
+Ubuntu 22.04.5 LTS
+6.8.0-1064-nvidia
+52
+               total        used        free      shared  buff/cache   available
+Mem:             442           6          46           0         389         432
+torch 2.7.1+cu126 cuda 12.6 cudnn 90501

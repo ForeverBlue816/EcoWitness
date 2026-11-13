@@ -1,0 +1,20 @@
+Loading weights:   0%|          | 0/760 [00:00<?, ?it/s]Loading weights: 100%|██████████| 760/760 [00:00<00:00, 10993.64it/s]
+[transformers] `causal_conv1d_fn` is falling back to its reference PyTorch implementation because `causal_conv1d` is not installed. This is correct but much slower; install `causal_conv1d` for the optimized kernel.
+[transformers] `causal_conv1d_update` is falling back to its reference PyTorch implementation because `causal_conv1d` is not installed. This is correct but much slower; install `causal_conv1d` for the optimized kernel.
+en/revise: 25738 records done, 4666s
+en/chain: 7523 records done, 12020s
+{
+ "none_f1_after_revision": 0.9795,
+ "post_revision_accuracy": 0.9574,
+ "changed_f1": 0.9738,
+ "contagion_rate": 0.0018,
+ "inertia_rate": 0.0199,
+ "redundancy_overreaction_rate": 0.0583,
+ "stale_citation_rate": 0.0001,
+ "chain_final_accuracy": 0.8095,
+ "chain_drift": 0.0993,
+ "chain_recovery_rate": 0.3852,
+ "conservation_accuracy": 0.9869,
+ "species_count_mae": 0.0371,
+ "habitat_far_error_rate": 0.0925
+}

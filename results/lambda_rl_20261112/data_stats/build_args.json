@@ -1,0 +1,22 @@
+{
+ "splits": [
+  "train",
+  "val",
+  "test"
+ ],
+ "langs": [
+  "en"
+ ],
+ "out": "data",
+ "edits_per_item": 4,
+ "chains_per_item": 1,
+ "train_chains": 0,
+ "silent_per_item": 2,
+ "perm_rate": 0.5,
+ "probe_removals": 2,
+ "holdout_families": [
+  "C1-SceneAndCommunity"
+ ],
+ "seed": "ecowitness-v1",
+ "limit": 0
+}
